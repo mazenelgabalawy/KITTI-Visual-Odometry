@@ -46,7 +46,7 @@ if __name__ == "__main__":
     F = np.linalg.inv(Kp_right).T @ E @ np.linalg.inv(Kp_left)  # Fundamental matrix
     
     # Initialize poses file
-    C_k = np.hstack((R_left, t_left.reshape(3,1)))
+    C_k = np.eye(4)  # Initial pose (Identity matrix)
     # Save initial pose of the left camera
     save_transformation_matrix(output_file, C_k)
     
