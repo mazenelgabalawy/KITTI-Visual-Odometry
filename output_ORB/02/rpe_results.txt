@@ -1,0 +1,14 @@
+RPE w.r.t. translation part (m)
+for delta = {self.delta} ({self.delta_unit.value}) using consecutive pairs
+(with SE(3) Umeyama alignment)
+
+       max	2.895483
+      mean	1.358248
+    median	1.341898
+       min	0.265663
+      rmse	1.454616
+       sse	97.331769
+       std	0.520645
+
+Plot saved to ./output_ORB/02/rpe_plot_raw.png
+Plot saved to ./output_ORB/02/rpe_plot_map.png

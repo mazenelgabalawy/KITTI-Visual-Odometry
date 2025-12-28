@@ -29,6 +29,7 @@ ruamel.yaml.clib==0.2.15
 scipy==1.15.3
 seaborn==0.13.2
 six==1.17.0
+tqdm==4.67.1
 typing_extensions==4.15.0
 tzdata==2025.3
 zstandard==0.25.0

@@ -1,0 +1,13 @@
+APE w.r.t. translation part (m)
+(with SE(3) Umeyama alignment)
+
+       max	60.911529
+      mean	31.591928
+    median	31.768477
+       min	9.595872
+      rmse	34.670849
+       sse	5458589.731431
+       std	14.283481
+
+[WARNING] ./output_ORB_epipolar/00/ape_plot_raw.png exists, overwrite?
+enter 'y' to overwrite or any other key to cancel
