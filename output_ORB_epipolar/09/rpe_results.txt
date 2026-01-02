@@ -1,0 +1,14 @@
+RPE w.r.t. translation part (m)
+for delta = {self.delta} ({self.delta_unit.value}) using consecutive pairs
+(not aligned)
+
+       max	7.366730
+      mean	2.714090
+    median	2.467884
+       min	0.521796
+      rmse	3.251895
+       sse	158.622358
+       std	1.791240
+
+Plot saved to ./output_ORB_epipolar/09/rpe_plot_raw.png
+Plot saved to ./output_ORB_epipolar/09/rpe_plot_map.png

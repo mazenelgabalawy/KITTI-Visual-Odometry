@@ -1,0 +1,13 @@
+APE w.r.t. translation part (m)
+(not aligned)
+
+       max	1240.801412
+      mean	596.983680
+    median	618.918293
+       min	0.000000
+      rmse	751.271972
+       sse	621414942.505019
+       std	456.092164
+
+Plot saved to ./output_ORB_epipolar/01/ape_plot_raw.png
+Plot saved to ./output_ORB_epipolar/01/ape_plot_map.png

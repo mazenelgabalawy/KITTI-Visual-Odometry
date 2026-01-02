@@ -17,10 +17,10 @@ if __name__ == "__main__":
     orb = cv2.ORB_create(nfeatures=nfeature, nlevels=nlevles, scaleFactor=scale)
     
     # Load images
-    input_folder = os.path.dirname(__file__) + f"/sequences/{0:02d}/"
-    output_folder = os.path.dirname(__file__) + f"/output_ORB_epipolar/{0:02d}/"
+    input_folder = os.path.dirname(__file__) + f"/sequences/{1:02d}/"
+    output_folder = os.path.dirname(__file__) + f"/output_ORB_epipolar/{1:02d}/"
     
-    left_curr, right_curr = load_stereo_pair(1500, input_folder)
+    left_curr, right_curr = load_stereo_pair(1076, input_folder)
     left_curr = clahe.apply(left_curr)
     right_curr = clahe.apply(right_curr)
 
