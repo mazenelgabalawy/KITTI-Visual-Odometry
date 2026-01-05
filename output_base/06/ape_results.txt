@@ -1,13 +1,13 @@
 APE w.r.t. translation part (m)
-(with SE(3) Umeyama alignment)
+(not aligned)
 
-       max	32.004503
-      mean	14.221968
-    median	11.833088
-       min	5.106962
-      rmse	15.975266
-       sse	280985.257371
-       std	7.276315
+       max	30.058720
+      mean	12.970476
+    median	11.108434
+       min	0.000000
+      rmse	16.334643
+       sse	293769.450927
+       std	9.929115
 
-Plot saved to ./output/06/ape_plot_raw.png
-Plot saved to ./output/06/ape_plot_map.png
+Plot saved to ./output_base/06/ape_plot_raw.png
+Plot saved to ./output_base/06/ape_plot_map.png

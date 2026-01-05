@@ -189,7 +189,7 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         if len(dists) >= 2:
             dists_sorted = np.partition(dists, 1)
             second_dist = dists_sorted[1]
-            if min_dist / second_dist >= ratio_test:
+            if min_dist / (second_dist + 1e-9) >= ratio_test:
                 continue
 
         u_query = kp_query.pt[0]
