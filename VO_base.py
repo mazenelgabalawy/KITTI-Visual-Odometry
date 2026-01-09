@@ -78,10 +78,11 @@ if __name__ == "__main__":
             left_feat_curr, left_desc_curr = orb.detectAndCompute(left_curr, None)
             
             # Match features between previous and current left images (temporal matching) and return good matches
-            temporal_matches = BF_matcher(left_desc_prev, left_desc_curr, matching_norm, inliner_threshold=0.7, cross_check=True)
+            bf = cv2.BFMatcher(matching_norm, crossCheck=True)
+            temporal_matches = bf.match(left_desc_prev, left_desc_curr)
                  
             # Match features between current left and right images (stereo matching)
-            stereo_matches_prev = BF_matcher(left_desc_prev, right_desc_prev, matching_norm, inliner_threshold=0.7, cross_check=True)
+            stereo_matches_prev = bf.match(left_desc_prev, right_desc_prev)
             
             # Filter matches that are exist in both temporal and stereo matches
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,

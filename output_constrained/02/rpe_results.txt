@@ -2,13 +2,13 @@ RPE w.r.t. translation part (m)
 for delta = {self.delta} ({self.delta_unit.value}) using consecutive pairs
 (not aligned)
 
-       max	4.274779
-      mean	1.801391
-    median	1.469167
-       min	0.435286
-      rmse	2.072919
-       sse	197.661645
-       std	1.025662
+       max	6.503738
+      mean	2.201226
+    median	1.980516
+       min	0.382585
+      rmse	2.607345
+       sse	312.719299
+       std	1.397443
 
 Plot saved to ./output_constrained/02/rpe_plot_raw.png
 Plot saved to ./output_constrained/02/rpe_plot_map.png

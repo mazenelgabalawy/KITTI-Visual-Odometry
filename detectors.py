@@ -7,16 +7,16 @@ from utils import *
 from filter import *
 
 if __name__ == "__main__":
-    nfeatures = 1000
+    nfeatures = 2000
     scale = 1.6
     nlevels = 8
     
-    orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor = scale, nlevels = nlevels)
+    orb = cv2.ORB_create(nfeatures=nfeatures)
     sift = cv2.SIFT_create(nfeatures=nfeatures)
     
     sequences = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    
-    for _ in range(10):
+    # sequences = [0]
+    for _ in range(0,5):
         sequence = np.random.choice(sequences)
         sequence_length = len(glob(os.path.join(os.path.dirname(__file__) + f"/sequences/{sequence:02d}/", "image_0", "*.png")))
         image = np.random.randint(0, sequence_length)

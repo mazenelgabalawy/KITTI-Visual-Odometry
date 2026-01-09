@@ -2,29 +2,28 @@ import numpy as np
 import cv2
 import bisect
 from scipy.optimize import least_squares
-
-def get_features(image, nfeatures = 2000, method='ORB'):
-    
-    if method == 'ORB':
-        # Initialize ORB detector
-        orb = cv2.ORB.create(nfeatures=nfeatures)
-        
-        # Find the keypoints and descriptors with ORB
-        keypoints, descriptors = orb.detectAndCompute(image, None)
-    elif method == 'SIFT':
-        # Initialize SIFT detector
-        sift = cv2.SIFT.create(nfeatures=nfeatures)
-        
-        # Find the keypoints and descriptors with SIFT
-        keypoints, descriptors = sift.detectAndCompute(image, None)
-    else:
-        raise ValueError("Unsupported feature detection method.")
-    
-    return keypoints, descriptors
-
-import cv2
-import numpy as np
 from collections import defaultdict
+
+def process_image(image, nfeatures, scale, nlevels, grid_size=(30,20), max_per_grid=5):
+    """
+        Process the image to detect and compute ORB features and descriptors,
+        and cluster them to ensure uniform distribution across the image.
+        
+        Args:
+            image (np.ndarray): Input image.
+            nfeatures (int): Number of features to detect.
+            scale (float): Scale factor for the ORB detector.
+            nlevels (int): Number of pyramid levels for the ORB detector.
+            grid_size (tuple): Size of the grid for clustering keypoints.
+            max_per_grid (int): Maximum number of keypoints per grid cell.
+        Returns:
+            keypoints (list): List of detected keypoints.
+            descriptors (np.ndarray): Corresponding descriptors for the keypoints.
+    """
+    orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor = scale, nlevels = nlevels)
+    keypoints, descriptors = orb.detectAndCompute(image, None)
+    keypoints, descriptors = cluster_keypoints(keypoints, descriptors, image=image, grid_size=grid_size, max_per_grid=max_per_grid)
+    return keypoints, descriptors
 
 def cluster_keypoints(keypoints, descriptors, image, grid_size, max_per_grid=3):
     """
@@ -74,7 +73,6 @@ def cluster_keypoints(keypoints, descriptors, image, grid_size, max_per_grid=3):
     
     return selected_kps, selected_descs
 
-
 def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross_check=False, pixel_threshold=2.0,
                              max_hamming_distance=30, ratio_test=0.7, max_disparity=64.0, min_disparity=1.0):
     """
@@ -96,6 +94,9 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
     if len(feat_left) == 0 or len(feat_right) == 0:
         return []
 
+    # Precompute popcount LUT for fast Hamming distance
+    popcount = np.array([bin(i).count('1') for i in range(256)], dtype=int)
+
     # Pre-sort right keypoints by y for l2r
     y_right = np.array([kp.pt[1] for kp in feat_right])
     idx_right_sorted = np.argsort(y_right)
@@ -116,10 +117,10 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         desc_train_subset = desc_right_sorted[low:high]  # (c, 32)
         feat_train_subset = feat_right_sorted[low:high]
 
-        # Vectorized Hamming distance
-        xor = np.bitwise_xor(desc_query, desc_train_subset)  # (c, 32)
-        bits = np.unpackbits(xor, axis=1)  # (c, 256)
-        dists = np.sum(bits, axis=1).astype(float)  # (c,)
+        # Vectorized Hamming distance using LUT
+        xor = desc_query ^ desc_train_subset  # (c, 32) uint8
+        bit_counts = popcount[xor]  # (c, 32) int
+        dists = np.sum(bit_counts, axis=1)  # (c,)
 
         if len(dists) == 0:
             continue
@@ -145,9 +146,9 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         if disparity < min_disparity or disparity > max_disparity:
             continue
 
-        # Match with original train idx
+        # Match with original train idx (fix: cast min_dist to float for cv2.DMatch)
         train_idx_original = idx_right_sorted[low + min_idx]
-        match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=min_dist)
+        match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
         l2r_matches.append(match)
 
     if not cross_check:
@@ -173,9 +174,10 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         desc_train_subset = desc_left_sorted[low:high]
         feat_train_subset = feat_left_sorted[low:high]
 
-        xor = np.bitwise_xor(desc_query, desc_train_subset)
-        bits = np.unpackbits(xor, axis=1)
-        dists = np.sum(bits, axis=1).astype(float)
+        # Vectorized Hamming distance using LUT (optimized)
+        xor = desc_query ^ desc_train_subset
+        bit_counts = popcount[xor]
+        dists = np.sum(bit_counts, axis=1)
 
         if len(dists) == 0:
             continue
@@ -198,9 +200,9 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         if disparity < min_disparity or disparity > max_disparity:
             continue
 
-        # Match with original train idx (left)
+        # Match with original train idx (left) (fix: cast min_dist to float for cv2.DMatch)
         train_idx_original = idx_left_sorted[low + min_idx]
-        match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=min_dist)
+        match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
         r2l_matches.append(match)
 
     # Mutual best matches (cross-check)
@@ -465,3 +467,16 @@ def orthogonalize_to_planar_motion(R, alpha=0.8):
         R_planar = U @ np.diag([1, 1, -1]) @ Vt
         
     return R_planar
+
+
+def is_valid_keyframe(t, points_3D, threshold_ratio=0.1):
+    """
+    
+    """
+    
+    avg_depth = np.mean(points_3D[:, 2])
+    
+    ratio = np.linalg.norm(t) / avg_depth
+    if ratio > threshold_ratio:
+        return True
+    return False

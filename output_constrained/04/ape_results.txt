@@ -1,13 +1,13 @@
 APE w.r.t. translation part (m)
 (not aligned)
 
-       max	23.946794
-      mean	7.222102
-    median	4.665059
+       max	7.836740
+      mean	3.714909
+    median	3.353742
        min	0.000000
-      rmse	9.945281
-       sse	26804.236946
-       std	6.837387
+      rmse	4.296932
+       sse	5003.643167
+       std	2.159417
 
 Plot saved to ./output_constrained/04/ape_plot_raw.png
 Plot saved to ./output_constrained/04/ape_plot_map.png
