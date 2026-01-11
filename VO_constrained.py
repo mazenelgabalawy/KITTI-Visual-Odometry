@@ -102,17 +102,7 @@ if __name__ == "__main__":
             # Match features between current left and right images
             stereo_matches_prev = rectified_stereo_matcher(left_feat_prev, left_desc_prev, right_feat_prev, right_desc_prev,
                                                            cross_check=True, pixel_threshold=2.0, max_hamming_distance=50,
-                                                           ratio_test=0.8, max_disparity=64.0)
-            
-            # temporal_matches_img = cv2.drawMatches(left_prev, left_feat_prev, left_curr, left_feat_curr, temporal_matches, None, flags=cv2.DrawMatchesFlags_DEFAULT)
-            # stereo_matches_img = cv2.drawMatches(left_prev, left_feat_prev, right_prev, right_feat_prev, stereo_matches_prev, None, flags=cv2.DrawMatchesFlags_DEFAULT)
-
-            # temporal_matches_img = cv2.resize(temporal_matches_img, (0,0), fx=0.75, fy=1)
-            # stereo_matches_img = cv2.resize(stereo_matches_img, (0,0), fx=0.75, fy=1)
-            # cv2.imshow("Temporal matches",temporal_matches_img)
-            # cv2.imshow("Stereo matches",stereo_matches_img)
-            # cv2.waitKey(1)
-            
+                                                           ratio_test=0.8, max_disparity=64.0)            
             
             # Filter matches that are exist in both temporal and stereo matches
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,

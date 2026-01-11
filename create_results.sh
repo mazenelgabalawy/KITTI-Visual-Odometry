@@ -5,6 +5,13 @@ sequence=("00" "01" "02" "03" "04" "05" "06" "07" "08" "09" "10")
 #sequence=("10")
 delta=100
 output_folder=$1 # argument 1: output folder path (e.g., ./output_base/)
+sequence_number=$2
+
+
+if sequence_number != "" ; then
+    sequence=("$sequence_number")
+fi
+
 old_files=("ape_results.txt" "rpe_results.txt" "ape_plot_map.png" "ape_plot_raw.png" 
             "rpe_plot_map.png" "rpe_plot_raw.png" 
             "trajectory_plot_trajectories.png" "trajectory_plot_xyz.png" "trajectory_plot_rpy.png"
