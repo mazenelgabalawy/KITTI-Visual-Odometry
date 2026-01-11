@@ -35,5 +35,5 @@ Make sure to replace `<sequence_name>` with the actual name of the sequence you 
 # Viewing the results
 After running the script, you can find the generated EVO results in the specified output folder. The results include text files and plots for APE, RPE, and trajectory comparisons.
 
-![APE Map](./output_constrained/ape_plot_map.png)
-![Trajectory Plot](./output_constrained/trajectory_plot_xyz.png)
+![APE Map](./output_constrained/00/ape_plot_map.png)
+![Trajectory Plot](./output_constrained/00/trajectory_plot_xyz.png)
