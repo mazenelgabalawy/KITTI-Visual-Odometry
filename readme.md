@@ -16,22 +16,36 @@ To change input and output folders, modify the respective variables in the main 
 
 
 # Creating EVO results
-To generate EVO results, run the following command:
+To generate EVO results, run the following commands:
 
-```bash ./create_results.sh <path_to_output_folder>```
+For Absolute Pose Error (APE) calculation.
+
+```$ evo_ape kitti ./path_to_ground_truth/ ./path_to_estimated_trajectory/ -p --plot_mode xz``` 
+
+For Relative Pose Error (RPE) calculation.
+
+```$ evo_rpe kitti ./path_to_ground_truth/ ./path_to_estimated_trajectory/ -p --plot_mode xz --delta 100 --delta_unit m ```
+
+Replace `--delta` and `--delta_unit` values as needed.
+
+For Trajectory comparison.
+
+```$ evo_traj kitti --ref ./path_to_ground_truth/ ./path_to_estimated_trajectory/ -p --plot_mode xyz ```
+
+## Saving all results using a script
+To run all the previous commands and save the results in the specified output folder, use the following command:
+```$ ./create_results.sh <path_to_output_folder>```
 
 Replace `<path_to_output_folder>` with the path to the folder containing the output data,e.g:
 
-```bash ./create_results.sh ./output_constrained/```
-
+```$ ./create_results.sh ./output_constrained/```
 By default, the script will process all sequences in the specified folder. If you want to process a specific sequence, you can provide the sequence name as an additional argument:
 
-```bash ./create_results.sh <path_to_output_folder> <sequence_name>```
+```$ ./create_results.sh <path_to_output_folder> <sequence_name>```
 
 Make sure to replace `<sequence_name>` with the actual name of the sequence you want to process, e.g:
 
-```bash ./create_results.sh ./output_constrained/ 01```
-
+```$ ./create_results.sh ./output_constrained/ 01```
 # Viewing the results
 After running the script, you can find the generated EVO results in the specified output folder. The results include text files and plots for APE, RPE, and trajectory comparisons.
 
