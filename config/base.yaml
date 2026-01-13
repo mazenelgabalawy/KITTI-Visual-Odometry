@@ -1,0 +1,10 @@
+sequences: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+dataset_path: ./sequences
+output_dir: output_base
+nfeatures: 3000
+scale: 1.6
+nlevels: 8
+matching_norm: NORM_HAMMING
+cross_check: true
+pnp_confidence: 0.99
+pnp_iterations_count: 100

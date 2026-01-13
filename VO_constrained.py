@@ -2,16 +2,47 @@ import os
 from glob import glob
 import numpy as np
 import cv2
+import yaml
 
 from utils import *
 from filter import *
 from tqdm import tqdm
 
 if __name__ == "__main__":
-    for i in range(0,11):
+    # Load configuration from YAML file
+    config_path = os.path.join(os.path.dirname(__file__), 'config', 'constrained.yaml')
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Extract parameters from config
+    sequences = config['sequences']
+    dataset_path = config['dataset_path']
+    output_dir = config['output_dir']
+    nfeatures = config['nfeatures']
+    scale = config['scale']
+    nlevels = config['nlevels']
+    grid_size = config['grid_size']
+    max_per_grid = config['max_per_grid']
+    min_depth_multiplier = config['min_depth_multiplier']  # For min_depth = min_depth_multiplier * base_line
+    max_translation = config['max_translation']
+    max_pitch_deg = config['max_pitch_deg']  # Renamed for clarity, since it's used for pitch
+    matching_norm = config['matching_norm']
+    temporal_inlier_threshold = config['temporal_inlier_threshold']
+    temporal_cross_check = config['temporal_cross_check']
+    stereo_cross_check = config['stereo_cross_check']
+    stereo_pixel_threshold = config['stereo_pixel_threshold']
+    stereo_max_hamming_distance = config['stereo_max_hamming_distance']
+    stereo_ratio_test = config['stereo_ratio_test']
+    stereo_max_disparity = config['stereo_max_disparity']
+    relative_depth_uncertainty_threshold = config['relative_depth_uncertainty_threshold']
+    pnp_confidence = config['pnp_confidence']
+    pnp_iterations_count = config['pnp_iterations_count']
+    orthogonalize_alpha = config['orthogonalize_alpha']
+    
+    for i in sequences:
         print(f"Running filter on sequence {i:02d}")
-        input_folder = os.path.dirname(__file__) + f"/sequences/{i:02d}/"
-        output_folder = os.path.dirname(__file__) + f"/output_constrained/{i:02d}/"
+        input_folder = os.path.join(os.path.dirname(__file__), dataset_path, f"{i:02d}")
+        output_folder = os.path.join(os.path.dirname(__file__), output_dir, f"{i:02d}")
         
         os.makedirs(output_folder, exist_ok=True)
         
@@ -57,39 +88,16 @@ if __name__ == "__main__":
         # Save initial pose of the left camera
         save_transformation_matrix(output_file, C_k)
         
-        # print("Left Camera Intrinsics:\n", Kp_left)
-        # print("Left Camera Rotation:\n", R_left)
-        # print("Left Camera Translation:\n", t_left)
-        
-        # print("Right Camera Intrinsics:\n", Kp_right)
-        # print("Right Camera Rotation:\n", R_right)
-        # print("Right Camera Translation:\n", t_right)
-        
-        nfeatures = 3000  # Number of features to detect
-        scale = 1.2
-        nlevels = 8
-        
-        grid_size = (50, 30)
-        max_per_grid = 7
-
-        min_depth = 3 * base_line  # meters
-        max_translation = 15.0  # meters
-        max_yaw = np.deg2rad(30)  # radians
-        
         # Create ORB detector
-        orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor = scale, nlevels = nlevels)
-        matching_norm = cv2.NORM_HAMMING    
+        orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor=scale, nlevels=nlevels)
+        matching_norm = getattr(cv2, matching_norm)  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
+        
         # Initialize previous images
         left_prev, right_prev = load_stereo_pair(0, input_folder)
         
         left_feat_prev, left_desc_prev = process_image(left_prev, nfeatures, scale, nlevels, grid_size, max_per_grid)
         right_feat_prev, right_desc_prev = process_image(right_prev, nfeatures, scale, nlevels, grid_size, max_per_grid)
-        # left_feat_prev, left_desc_prev = orb.detectAndCompute(left_prev, None)
-        # right_feat_prev, right_desc_prev = orb.detectAndCompute(right_prev, None)
-        # left_feat_prev, left_desc_prev = cluster_keypoints(left_feat_prev, left_desc_prev, image=left_prev, grid_size=grid_size, max_per_grid=max_per_grid)
-        # right_feat_prev, right_desc_prev = cluster_keypoints(right_feat_prev, right_desc_prev, image=right_prev, grid_size=grid_size, max_per_grid=max_per_grid)
                 
-        
         for k in tqdm(range(1, sequence_length)):
             left_curr, right_curr = load_stereo_pair(k, input_folder)
             
@@ -97,18 +105,17 @@ if __name__ == "__main__":
             right_feat_curr, right_desc_curr = process_image(right_curr, nfeatures, scale, nlevels, grid_size, max_per_grid)
             
             # Match features between previous and current left images
-            temporal_matches = BF_matcher(left_desc_prev, left_desc_curr, matching_norm, inliner_threshold=0.5, cross_check=True)
+            temporal_matches = BF_matcher(left_desc_prev, left_desc_curr, matching_norm, inliner_threshold=temporal_inlier_threshold, cross_check=temporal_cross_check)
                 
             # Match features between current left and right images
             stereo_matches_prev = rectified_stereo_matcher(left_feat_prev, left_desc_prev, right_feat_prev, right_desc_prev,
-                                                           cross_check=True, pixel_threshold=2.0, max_hamming_distance=50,
-                                                           ratio_test=0.8, max_disparity=64.0)            
+                                                           cross_check=stereo_cross_check, pixel_threshold=stereo_pixel_threshold, max_hamming_distance=stereo_max_hamming_distance,
+                                                           ratio_test=stereo_ratio_test, max_disparity=stereo_max_disparity)            
             
             # Filter matches that are exist in both temporal and stereo matches
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,
                                                                                             left_feat_prev, right_feat_prev, left_feat_curr)
             
-            # print(f"len(temporal_matches), len(stereo_matches_prev), len(filtered)", len(temporal_matches), len(stereo_matches_prev), len(left_prev_pts))
             # Triangulate 3D points from previous left and right images
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
             points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
@@ -117,8 +124,8 @@ if __name__ == "__main__":
             sigma_z = np.square(depths)/(focal_length * base_line)
             
             # Filter points based on depth and uncertainty
-            valid_idx = points_3D[:, 2] > min_depth
-            valid_idx = valid_idx & (sigma_z/depths < 0.5)  # Keep points with less than 50% relative depth uncertainty
+            valid_idx = points_3D[:, 2] > min_depth_multiplier * base_line
+            valid_idx = valid_idx & (sigma_z/depths < relative_depth_uncertainty_threshold)
             points_3D = points_3D[valid_idx]
             left_curr_pts = left_curr_pts[valid_idx]
             right_prev_pts = right_prev_pts[valid_idx]
@@ -129,9 +136,6 @@ if __name__ == "__main__":
             if points_3D.shape[0] < 4:
                 print(f"Frame {k}: Not enough points for PnP ({points_3D.shape[0]} points). Skipping frame.")
                 # Not enough points for PnP; skip this frame
-                left_prev = left_curr
-                right_prev = right_curr
-                
                 left_prev = left_curr
                 right_prev = right_curr
                 
@@ -151,13 +155,13 @@ if __name__ == "__main__":
             points_3D = points_3D.astype(np.float32)
             left_curr_pts = left_curr_pts.astype(np.float32)
 
-            _, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None, confidence=0.99, iterationsCount=2000)
+            _, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None, confidence=pnp_confidence, iterationsCount=pnp_iterations_count)
             
             R_curr, _ = cv2.Rodrigues(rvec)
             t_curr = tvec.reshape(3)
             
             
-            R_ortho = orthogonalize_to_planar_motion(R_curr, alpha=0.8)
+            R_ortho = orthogonalize_to_planar_motion(R_curr, alpha=orthogonalize_alpha)
             
             # Put Rotation and Translation into KITTI format (x-right, y-down, z-forward)
             R_cam = R_ortho.T
@@ -167,7 +171,7 @@ if __name__ == "__main__":
             
                         
             # Check if the translation or pitch is too large
-            if np.linalg.norm(t_cam) > max_translation or pitch > max_yaw: # assuming 60km/h max speed and 30 degrees max pitch
+            if np.linalg.norm(t_cam) > max_translation or abs(pitch) > np.deg2rad(max_pitch_deg):
                 print(f"Frame {k}: Translation too large ({np.linalg.norm(t_cam):.2f} m) or pitch too large ({np.rad2deg(pitch):.2f} degrees). Skipping frame.")
                 
                 # Skip this frame; keep previous pose

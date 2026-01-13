@@ -1,0 +1,23 @@
+sequences: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+dataset_path: ./sequences
+output_dir: output_constrained
+nfeatures: 3000
+scale: 1.2
+nlevels: 8
+grid_size: [50, 30]
+max_per_grid: 7
+min_depth_multiplier: 3
+max_translation: 15.0
+max_pitch_deg: 30
+matching_norm: NORM_HAMMING
+temporal_inlier_threshold: 0.5
+temporal_cross_check: true
+stereo_cross_check: true
+stereo_pixel_threshold: 2.0
+stereo_max_hamming_distance: 50
+stereo_ratio_test: 0.8
+stereo_max_disparity: 64.0
+relative_depth_uncertainty_threshold: 0.5
+pnp_confidence: 0.99
+pnp_iterations_count: 2000
+orthogonalize_alpha: 0.8

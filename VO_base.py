@@ -2,6 +2,7 @@ import os
 from glob import glob
 import numpy as np
 import cv2
+import yaml
 
 from utils import *
 from filter import *
@@ -9,10 +10,27 @@ from tqdm import tqdm
 
 
 if __name__ == "__main__":
-    for i in range(0,11):
+    # Load configuration from YAML file
+    config_path = os.path.join(os.path.dirname(__file__), 'config', 'base.yaml')
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Extract parameters from config
+    sequences = config['sequences']
+    dataset_path = config['dataset_path']
+    output_dir = config['output_dir']
+    nfeatures = config['nfeatures']
+    scale = config['scale']
+    nlevels = config['nlevels']
+    matching_norm = config['matching_norm']
+    cross_check = config['cross_check']
+    pnp_confidence = config['pnp_confidence']
+    pnp_iterations_count = config['pnp_iterations_count']
+    
+    for i in sequences:
         print(f"Running filter on sequence {i:02d}")
-        input_folder = os.path.dirname(__file__) + f"/sequences/{i:02d}/"
-        output_folder = os.path.dirname(__file__) + f"/output_base/{i:02d}/"
+        input_folder = os.path.join(os.path.dirname(__file__), dataset_path, f"{i:02d}")
+        output_folder = os.path.join(os.path.dirname(__file__), output_dir, f"{i:02d}")
         
         os.makedirs(output_folder, exist_ok=True)
         
@@ -56,18 +74,10 @@ if __name__ == "__main__":
         # Initialize previous images
         left_prev, right_prev = load_stereo_pair(0, input_folder)    
 
-        method = 'ORB'  # Feature detection method
-        if method == 'ORB':
-            matching_norm = cv2.NORM_HAMMING
-        else:
-            matching_norm = cv2.NORM_L2
-        
-        nfeatures = 3000  # Number of features to detect
-        scale = 1.6
-        nlevels = 8
+        matching_norm = getattr(cv2, matching_norm)  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
         
         # Create ORB detector
-        orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor = scale, nlevels = nlevels)
+        orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor=scale, nlevels=nlevels)
             
         for k in tqdm(range(1, sequence_length)):
             left_curr, right_curr = load_stereo_pair(k, input_folder)
@@ -78,7 +88,7 @@ if __name__ == "__main__":
             left_feat_curr, left_desc_curr = orb.detectAndCompute(left_curr, None)
             
             # Match features between previous and current left images (temporal matching) and return good matches
-            bf = cv2.BFMatcher(matching_norm, crossCheck=True)
+            bf = cv2.BFMatcher(matching_norm, crossCheck=cross_check)
             temporal_matches = bf.match(left_desc_prev, left_desc_curr)
                  
             # Match features between current left and right images (stereo matching)
@@ -92,9 +102,22 @@ if __name__ == "__main__":
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
             points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
             
+            # Ensure sufficient correspondences and correct dtypes
+            if points_3D.shape[0] < 4:
+                print(f"Frame {k}: Not enough points for PnP ({points_3D.shape[0]} points). Skipping frame.")
+                # Not enough points for PnP; skip this frame
+                left_prev = left_curr
+                right_prev = right_curr
+                # Save previous pose again (no interpolation in base)
+                save_transformation_matrix(output_file, C_k)
+                continue
+
+            points_3D = points_3D.astype(np.float32)
+            left_curr_pts = left_curr_pts.astype(np.float32)
 
             # Estimate camera pose using PnP
-            _, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None)
+            _, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None,
+                                                        confidence=pnp_confidence, iterationsCount=pnp_iterations_count)
             
             R_curr, _ = cv2.Rodrigues(rvec)
             t_curr = tvec.reshape(3)
