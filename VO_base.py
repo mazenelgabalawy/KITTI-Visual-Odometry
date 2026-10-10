@@ -23,7 +23,8 @@ if __name__ == "__main__":
     scale = config['scale']
     nlevels = config['nlevels']
     matching_norm = getattr(cv2, config['matching_norm'])  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
-    cross_check = config['cross_check']
+    temporal_cross_check = config['temporal_cross_check']
+    stereo_cross_check = config['stereo_cross_check']
     min_abs_w = config['min_abs_w']  # Triangulated points with |w| < min_abs_w (beyond ~1/min_abs_w m) are rejected
     pnp_confidence = config['pnp_confidence']
     pnp_iterations_count = config['pnp_iterations_count']
@@ -89,11 +90,12 @@ if __name__ == "__main__":
             left_feat_curr, left_desc_curr = orb.detectAndCompute(left_curr, None)
             
             # Match features between previous and current left images (temporal matching) and return good matches
-            bf = cv2.BFMatcher(matching_norm, crossCheck=cross_check)
+            bf = cv2.BFMatcher(matching_norm, crossCheck=temporal_cross_check)
             temporal_matches = bf.match(left_desc_prev, left_desc_curr)
                  
             # Match features between current left and right images (stereo matching)
-            stereo_matches_prev = bf.match(left_desc_prev, right_desc_prev)
+            bf_stereo = cv2.BFMatcher(matching_norm, crossCheck=stereo_cross_check)
+            stereo_matches_prev = bf_stereo.match(left_desc_prev, right_desc_prev)
             
             # Filter matches that are exist in both temporal and stereo matches
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,
