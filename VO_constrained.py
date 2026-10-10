@@ -35,6 +35,7 @@ if __name__ == "__main__":
     stereo_ratio_test = config['stereo_ratio_test']
     stereo_max_disparity = config['stereo_max_disparity']
     relative_depth_uncertainty_threshold = config['relative_depth_uncertainty_threshold']
+    min_abs_w = config['min_abs_w']  # Triangulated points with |w| < min_abs_w (beyond ~1/min_abs_w m) are rejected
     pnp_confidence = config['pnp_confidence']
     pnp_iterations_count = config['pnp_iterations_count']
     orthogonalize_alpha = config['orthogonalize_alpha']
@@ -134,7 +135,13 @@ if __name__ == "__main__":
             
             # Triangulate 3D points from previous left and right images
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
-            points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
+            
+            # Keep only finite points in front of both cameras
+            valid_idx, points_3D = filter_valid_landmarks(points_3D_hom, P0, P1, min_abs_w)
+            points_3D = points_3D[valid_idx]
+            left_curr_pts = left_curr_pts[valid_idx]
+            right_prev_pts = right_prev_pts[valid_idx]
+            left_prev_pts = left_prev_pts[valid_idx]
             
             depths = points_3D[:, 2]
             sigma_z = np.square(depths)/(focal_length * base_line)

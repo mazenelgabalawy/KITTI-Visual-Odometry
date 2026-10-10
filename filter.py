@@ -291,6 +291,38 @@ def filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev, l
     return left_prev_pts, right_prev_pts, left_curr_pts
 
 
+def filter_valid_landmarks(points_3D_hom, P0, P1, min_abs_w=1e-4):
+    """
+    Checks triangulated points before they are used for PnP.
+    
+    Args:
+    - points_3D_hom: np.array of shape (4, N) from cv2.triangulatePoints. Each column has unit norm,
+      so |w| is about 1/range (in 1/m) for points further than a few meters.
+    - P0: Projection matrix of the left camera.
+    - P1: Projection matrix of the right camera.
+    - min_abs_w: Minimum |w|. 1e-4 rejects points beyond about 10 km (near-zero disparity).
+    
+    Returns:
+    - valid_idx: np.array of shape (N,), True for points with finite coordinates, |w| >= min_abs_w,
+      and positive depth in both cameras.
+    - points_3D: np.array of shape (N, 3) of non-homogeneous points (nonfinite where w is 0).
+    """
+    w = points_3D_hom[3, :]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        points_3D = (points_3D_hom[:3, :] / w).T  # Convert to non-homogeneous coordinates
+        
+        # Depth of each point in the left and right camera
+        points_3D_hom_normalized = np.hstack((points_3D, np.ones((len(points_3D), 1))))
+        depth_left = points_3D_hom_normalized @ P0[2]
+        depth_right = points_3D_hom_normalized @ P1[2]
+        
+        valid_idx = np.isfinite(points_3D_hom).all(axis=0) & np.isfinite(points_3D).all(axis=1)
+        valid_idx = valid_idx & (w != 0) & (np.abs(w) >= min_abs_w)
+        valid_idx = valid_idx & (depth_left > 0) & (depth_right > 0)
+    
+    return valid_idx, points_3D
+
+
 def orthogonalize_to_planar_motion(R, alpha=0.8):
     """
         Orthogonalize rotation matrix R to planar motion by blending with optimal planar rotation.

@@ -24,6 +24,7 @@ if __name__ == "__main__":
     nlevels = config['nlevels']
     matching_norm = getattr(cv2, config['matching_norm'])  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
     cross_check = config['cross_check']
+    min_abs_w = config['min_abs_w']  # Triangulated points with |w| < min_abs_w (beyond ~1/min_abs_w m) are rejected
     pnp_confidence = config['pnp_confidence']
     pnp_iterations_count = config['pnp_iterations_count']
     
@@ -109,7 +110,11 @@ if __name__ == "__main__":
             
             # Triangulate 3D points from previous left and right images
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
-            points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
+            
+            # Keep only finite points in front of both cameras
+            valid_idx, points_3D = filter_valid_landmarks(points_3D_hom, P0, P1, min_abs_w)
+            points_3D = points_3D[valid_idx]
+            left_curr_pts = left_curr_pts[valid_idx]
             
             # Ensure sufficient correspondences and correct dtypes
             if points_3D.shape[0] < 4:
