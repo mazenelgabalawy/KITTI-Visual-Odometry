@@ -124,7 +124,6 @@ This is a research package evaluated on KITTI. The current phase fixes only defe
 that affect the estimates; corrections already made are listed in
 [docs/compatibility.md](docs/compatibility.md) §4b. Still open:
 
-- The rectified stereo matcher picks the best descriptor before checking its geometry (BUG-005).
 - `stereo_matcher.cross_check` is ignored for the base (brute-force) stereo
   matcher, which uses the temporal value instead (BUG-004).
 

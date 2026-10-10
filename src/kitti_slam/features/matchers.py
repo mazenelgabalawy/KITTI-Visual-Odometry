@@ -79,9 +79,11 @@ class RectifiedStereoMatcher(Matcher):
         """Vectorized one-directional epipolar-constrained matching pass.
 
         Matches the per-keypoint specification in
-        tests/unit/test_matcher_vectorization.py exactly: same tie-breaks
-        (first-occurrence argmin via sentinel masking + stable argsort), same
-        ratio-test gating, same disparity inequality directions.
+        tests/unit/test_matcher_vectorization.py exactly: candidates are the
+        train keypoints within the row band whose disparity lies in
+        [min_disparity, max_disparity]; the best is the first minimum Hamming
+        distance in row-sorted order; with two or more candidates it must pass
+        the ratio test against the second-best candidate distance.
 
         Instead of computing a dense (n_query, n_train) Hamming distance matrix
         (which wastes work: the true epipolar bands are typically tiny relative to
@@ -131,26 +133,31 @@ class RectifiedStereoMatcher(Matcher):
         dists = cls._POPCOUNT_LUT[xor].sum(axis=2, dtype=np.int64)  # (n_query, max_band)
         dists = np.where(valid, dists, SENTINEL)
 
+        # Geometry before ranking (BUG-005): only candidates inside the row band
+        # AND the disparity range compete for best and second-best, so a closer
+        # descriptor with impossible geometry cannot suppress a valid match.
+        u_band = u_train_sorted[clipped_cols]  # (n_query, max_band)
+        disparity = u_band - u_query[:, np.newaxis] if reverse_disparity else u_query[:, np.newaxis] - u_band
+        candidate = valid & (disparity >= min_disparity) & (disparity <= max_disparity)
+        dists = np.where(candidate, dists, SENTINEL)
+        n_candidates = candidate.sum(axis=1)
+
         min_idx_local = np.argmin(dists, axis=1)
         min_dist = dists[np.arange(n_query), min_idx_local]
 
         if max_band >= 2:
             second_dist = np.partition(dists, 1, axis=1)[:, 1]
         else:
-            # band_size <= max_band < 2 here, so the ratio test never applies;
+            # n_candidates <= max_band < 2 here, so the ratio test never applies;
             # this value is unused but must exist for the boolean expression below.
             second_dist = np.full(n_query, SENTINEL, dtype=dists.dtype)
 
         min_idx_col = np.minimum(low + min_idx_local, n_train - 1)
-        u_train_at_min = u_train_sorted[min_idx_col]
-        disparity = u_train_at_min - u_query if reverse_disparity else u_query - u_train_at_min
 
-        keep = band_size > 0
+        keep = n_candidates > 0
         keep &= min_dist <= max_hamming_distance
-        ratio_gate = (band_size >= 2) & (min_dist / (second_dist + 1e-9) >= ratio_test)
+        ratio_gate = (n_candidates >= 2) & (min_dist / (second_dist + 1e-9) >= ratio_test)
         keep &= ~ratio_gate
-        keep &= disparity >= min_disparity
-        keep &= disparity <= max_disparity
 
         matches = []
         train_idx_original_all = idx_train_sorted[min_idx_col]

@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import pytest
 
 from kitti_slam.config.schema import DetectorConfig, GridFilterConfig, StereoMatcherConfig
 from kitti_slam.features.base import Features
@@ -200,3 +201,40 @@ def test_rectified_cross_check_toggling():
     no_cross_pairs = {(m.queryIdx, m.trainIdx) for m in matches_no_cross}
     cross_pairs = {(m.queryIdx, m.trainIdx) for m in matches_cross}
     assert cross_pairs.issubset(no_cross_pairs)
+
+
+def _one_row_features(xs, descs):
+    return Features([cv2.KeyPoint(x=float(x), y=50.0, size=5.0) for x in xs], np.array(descs, dtype=np.uint8))
+
+
+def _flip_bits(desc, n):
+    out = desc.copy()
+    for i in range(n):
+        out[i // 8] ^= 1 << (i % 8)
+    return out
+
+
+@pytest.mark.parametrize("cross_check", [False, True])
+def test_rectified_invalid_geometry_does_not_suppress_valid_match(cross_check):
+    """BUG-005: the descriptor-best right keypoint has negative disparity (u = 120 >
+    100); the valid one (disparity 10 px) is 3 bits further. Geometry is checked
+    first, so the valid candidate is matched instead of nothing."""
+    d = np.random.default_rng(0).integers(0, 256, size=32, dtype=np.uint8)
+    left = _one_row_features([100.0], [d])
+    right = _one_row_features([120.0, 90.0], [d, _flip_bits(d, 3)])
+    cfg = StereoMatcherConfig(
+        kind="rectified", cross_check=cross_check, pixel_threshold=2.0, max_hamming_distance=30, ratio_test=0.8
+    )
+    assert _triples(RectifiedStereoMatcher(cfg).match(left, right)) == [(0, 1, 3.0)]
+
+
+def test_rectified_invalid_geometry_does_not_enter_ratio_test():
+    """A geometrically invalid near-duplicate (4 bits) must not make the only valid
+    candidate (3 bits) fail the ratio test (3/4 >= 0.7)."""
+    d = np.random.default_rng(1).integers(0, 256, size=32, dtype=np.uint8)
+    left = _one_row_features([100.0], [d])
+    right = _one_row_features([90.0, 30.0], [_flip_bits(d, 3), _flip_bits(d, 4)])  # disparities 10 and 70 px
+    cfg = StereoMatcherConfig(
+        kind="rectified", cross_check=True, pixel_threshold=2.0, max_hamming_distance=30, ratio_test=0.7
+    )
+    assert _triples(RectifiedStereoMatcher(cfg).match(left, right)) == [(0, 0, 3.0)]
