@@ -27,12 +27,11 @@ def build_pipeline(cfg: PipelineConfig) -> StereoVOPipeline:
     if cfg.stereo_matcher.kind == "rectified":
         stereo_matcher = RectifiedStereoMatcher(cfg.stereo_matcher)
     else:
-        # VO_base.py reuses the same BFMatcher object (raw bf.match, no ratio
-        # test) for both temporal and stereo matching -- built from the
-        # temporal matcher's norm/cross_check since StereoMatcherConfig(kind=
-        # "bruteforce") carries no norm of its own.
+        # Raw bf.match, no ratio test (VO_base.py). StereoMatcherConfig(kind=
+        # "bruteforce") carries no norm of its own, so the temporal matcher's norm
+        # is reused; cross_check is the stereo matcher's own setting (BUG-004).
         stereo_matcher = BruteForceMatcher(
-            cfg.temporal_matcher.norm, cfg.temporal_matcher.cross_check, ratio_threshold=None
+            cfg.temporal_matcher.norm, cfg.stereo_matcher.cross_check, ratio_threshold=None
         )
 
     landmark_filter = DepthUncertaintyFilter(cfg.landmark_filter) if cfg.landmark_filter is not None else None

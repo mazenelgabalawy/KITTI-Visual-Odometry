@@ -59,6 +59,21 @@ def test_factory_constrained_variant(repo_root):
     assert isinstance(pipeline.landmark_filter, DepthUncertaintyFilter)
 
 
+@pytest.mark.parametrize(("temporal", "stereo"), [(True, False), (False, True)])
+def test_factory_bruteforce_stereo_uses_its_own_cross_check(repo_root, temporal, stereo):
+    import dataclasses
+
+    cfg = load_config(repo_root / "configs" / "base.yaml")
+    cfg = dataclasses.replace(
+        cfg,
+        temporal_matcher=dataclasses.replace(cfg.temporal_matcher, cross_check=temporal),
+        stereo_matcher=dataclasses.replace(cfg.stereo_matcher, cross_check=stereo),
+    )
+    pipeline = build_pipeline(cfg)
+    assert pipeline.temporal_matcher.cross_check is temporal
+    assert pipeline.stereo_matcher.cross_check is stereo
+
+
 # ---------------------------------------------------------------------------
 # Synthetic in-memory stereo sequence
 # ---------------------------------------------------------------------------

@@ -120,14 +120,11 @@ Regression tests skip, rather than pass, when their data is missing.
 
 ## Known issues
 
-This is a research package evaluated on KITTI. The current phase fixes only defects
-that affect the estimates; corrections already made are listed in
-[docs/compatibility.md](docs/compatibility.md) §4b. Still open:
+This is a research package evaluated on KITTI. The defects that affected the
+estimates are corrected; the corrections and their measured effects are listed in
+[docs/compatibility.md](docs/compatibility.md) §4b.
 
-- `stereo_matcher.cross_check` is ignored for the base (brute-force) stereo
-  matcher, which uses the temporal value instead (BUG-004).
-
-Known limitations, not planned because they do not affect KITTI estimates:
+Known limitations, not fixed because they do not affect KITTI estimates:
 
 - A frame without ORB descriptors (for example a blank image) would crash the base pipeline.
 - There is no input preflight, and no atomic or resumable output.
