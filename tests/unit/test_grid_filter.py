@@ -103,3 +103,43 @@ def test_descriptor_alignment_preserved():
     for kp, desc in zip(out.keypoints, out.descriptors, strict=True):
         original_idx = int(desc[0])
         assert kps[original_idx].pt == kp.pt
+
+
+def _kps(points, responses):
+    return [
+        cv2.KeyPoint(x=float(x), y=float(y), size=5.0, response=float(r))
+        for (x, y), r in zip(points, responses, strict=True)
+    ]
+
+
+def test_remainder_row_and_column_are_their_own_cells():
+    """25x25 image, 10x10 cells: 3x3 cells, the last row and column 5 px wide.
+
+    Before BUG-006 the remainder was clipped into the neighbouring cell, so with
+    max_per_grid=1 only one of these four keypoints survived.
+    """
+    points = [(12, 12), (22, 12), (12, 22), (22, 22)]  # cell (1,1), remainder col, remainder row, corner
+    responses = [0.9, 0.8, 0.7, 0.6]
+    descs = np.arange(4 * 32, dtype=np.uint8).reshape(4, 32)
+    out = GridKeypointFilter(GridFilterConfig(grid_size=(10, 10), max_per_grid=1))(
+        Features(_kps(points, responses), descs), (25, 25)
+    )
+    assert [kp.pt for kp in out.keypoints] == [(12.0, 12.0), (22.0, 12.0), (12.0, 22.0), (22.0, 22.0)]
+    assert np.array_equal(out.descriptors, descs)
+
+
+def test_kitti_image_remainder_cells():
+    """KITTI 1226x370 with the constrained grid (50 px rows, 30 px columns): the
+    bottom 20 px and the right 26 px are separate cells."""
+    cfg = GridFilterConfig(grid_size=(50, 30), max_per_grid=1)
+    points = [(15, 340), (15, 360), (1190, 10), (1210, 10)]  # row 6 vs remainder row 7; col 39 vs remainder col 40
+    out = GridKeypointFilter(cfg)(Features(_kps(points, [0.5] * 4), np.zeros((4, 32), dtype=np.uint8)), (370, 1226))
+    assert len(out.keypoints) == 4
+
+
+def test_equal_responses_keep_input_order():
+    points = [(1, 1), (2, 2), (3, 3)]
+    out = GridKeypointFilter(GridFilterConfig(grid_size=(10, 10), max_per_grid=2))(
+        Features(_kps(points, [0.5, 0.5, 0.5]), np.arange(3 * 32, dtype=np.uint8).reshape(3, 32)), (15, 15)
+    )
+    assert [kp.pt for kp in out.keypoints] == [(1.0, 1.0), (2.0, 2.0)]
