@@ -260,3 +260,61 @@ def test_run_vo_refuses_baseline_dirs(repo_root):
     # A sibling directory that merely shares a prefix must NOT be refused.
     resolved = run_vo.guard_output_dir("output_base_experiment", repo_root)
     assert resolved == (repo_root / "output_base_experiment").resolve()
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
+
+
+def test_diagnostics_do_not_change_poses(repo_root):
+    from kitti_slam.odometry.diagnostics import FIELDS, FrameDiagnostics
+
+    cfg = load_config(repo_root / "configs" / "constrained.yaml")
+    sequence, _ = _make_synthetic_sequence(n_frames=5, step_px=6, depth=20.0)
+
+    plain = build_pipeline(cfg).run(sequence, progress=False)
+    diagnostics = FrameDiagnostics()
+    with_diag = build_pipeline(cfg).run(sequence, progress=False, diagnostics=diagnostics)
+
+    assert np.array_equal(plain, with_diag)
+    assert [row["frame"] for row in diagnostics.rows] == [1, 2, 3, 4]
+    for row in diagnostics.rows:
+        assert set(row) == set(FIELDS)
+        assert row["associated"] <= min(row["temporal_matches"], row["stereo_matches"])
+        if row["outcome"] == "registered":
+            assert row["consecutive_failures"] == 0
+            assert row["pnp_retval"] == 1 and row["pnp_inliers"] >= 4
+
+
+def test_diagnostics_record_failures_and_streaks(tmp_path):
+    from kitti_slam.odometry.diagnostics import FrameDiagnostics
+
+    pipeline = StereoVOPipeline(
+        detector=_EmptyDetector(),
+        temporal_matcher=_EmptyMatcher(),
+        stereo_matcher=_EmptyMatcher(),
+        landmark_filter=None,
+        pose_estimator=_AlwaysFailEstimator(),
+        motion_filter=NullMotionFilter(),
+        interpolate_on_skip=False,
+    )
+    diagnostics = FrameDiagnostics()
+    pipeline.run(_make_trivial_sequence(n_frames=4), progress=False, diagnostics=diagnostics)
+
+    assert [r["outcome"] for r in diagnostics.rows] == ["no_correspondences"] * 3
+    assert [r["consecutive_failures"] for r in diagnostics.rows] == [1, 2, 3]
+    assert all(r["pnp_retval"] == "" and r["landmarks"] == "" for r in diagnostics.rows)
+
+    path = tmp_path / "diagnostics.csv"
+    diagnostics.write_csv(path)
+    lines = path.read_text().splitlines()
+    assert lines[0].startswith("frame,outcome,temporal_matches")
+    assert lines[1] == "1,no_correspondences,0,0,0,,,,,,1"
+
+
+def test_diagnostics_reject_unknown_outcome():
+    from kitti_slam.odometry.diagnostics import FrameDiagnostics
+
+    with pytest.raises(ValueError):
+        FrameDiagnostics().append({"frame": 1, "outcome": "skipped"})

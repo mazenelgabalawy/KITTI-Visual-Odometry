@@ -71,21 +71,25 @@ class PlanarMotionFilter(MotionFilter):
         return _orthogonalize_to_planar_motion(R, alpha=self.cfg.orthogonalize_alpha)
 
     def is_plausible(self, R_world: np.ndarray, t_world: np.ndarray) -> bool:
+        return self.rejection_reason(R_world, t_world) is None
+
+    def rejection_reason(self, R_world: np.ndarray, t_world: np.ndarray) -> str | None:
         # VO_constrained.py L174:
         #   if np.linalg.norm(t_cam) > max_translation or abs(pitch) > np.deg2rad(max_pitch_deg):
         #       <skip frame>
         # i.e. plausible iff norm(t) <= max_translation AND abs(pitch) <= deg2rad(max_pitch_deg).
-        # `pitch` is the second (index 1) component of rotationMatrixToEulerAngles.
+        # `pitch` is the second (index 1) component of rotationMatrixToEulerAngles: the
+        # rotation about camera y, which is the heading axis (BUG-012).
         if self.cfg.max_translation is not None:
             if np.linalg.norm(t_world) > self.cfg.max_translation:
-                return False
+                return "implausible_translation"
 
         if self.cfg.max_pitch_deg is not None:
             pitch = rotation_to_euler(R_world)[1]
             if abs(pitch) > np.deg2rad(self.cfg.max_pitch_deg):
-                return False
+                return "implausible_heading"
 
-        return True
+        return None
 
 
 class NullMotionFilter(MotionFilter):
@@ -96,3 +100,6 @@ class NullMotionFilter(MotionFilter):
 
     def is_plausible(self, R_world: np.ndarray, t_world: np.ndarray) -> bool:
         return True
+
+    def rejection_reason(self, R_world: np.ndarray, t_world: np.ndarray) -> str | None:
+        return None

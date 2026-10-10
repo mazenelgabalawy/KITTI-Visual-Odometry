@@ -41,7 +41,7 @@ class PnPRansacEstimator(PoseEstimator):
             # is independently reproducible.
             cv2.setRNGSeed(self.cfg.seed)
 
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(
+        retval, rvec, tvec, inliers = cv2.solvePnPRansac(
             points_3d,
             points_2d,
             K,
@@ -53,7 +53,7 @@ class PnPRansacEstimator(PoseEstimator):
         R, _ = cv2.Rodrigues(rvec)
         t = tvec.reshape(3)
 
-        return PoseEstimate(R=R, t=t, inliers=inliers, success=True)
+        return PoseEstimate(R=R, t=t, inliers=inliers, success=True, retval=bool(retval))
 
 
 class DepthUncertaintyFilter(LandmarkFilter):

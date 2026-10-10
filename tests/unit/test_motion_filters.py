@@ -110,3 +110,14 @@ def test_null_filter():
 
     np.testing.assert_array_equal(null_filter.refine_rotation(R_random), R_random)
     assert null_filter.is_plausible(R_random, t_random) is True
+
+
+def test_rejection_reason_names_the_gate():
+    f = PlanarMotionFilter(MotionConfig(max_translation=15.0, max_pitch_deg=30.0, orthogonalize_alpha=0.8))
+    R_ok = Rotation.from_euler("y", 10, degrees=True).as_matrix()
+    R_turn = Rotation.from_euler("y", 40, degrees=True).as_matrix()
+    assert f.rejection_reason(R_ok, np.array([0.0, 0.0, 1.0])) is None
+    assert f.rejection_reason(R_ok, np.array([0.0, 0.0, 20.0])) == "implausible_translation"
+    assert f.rejection_reason(R_turn, np.array([0.0, 0.0, 1.0])) == "implausible_heading"
+    assert f.is_plausible(R_turn, np.array([0.0, 0.0, 1.0])) is False
+    assert NullMotionFilter().rejection_reason(R_turn, np.array([0.0, 0.0, 99.0])) is None

@@ -70,6 +70,7 @@ from kitti_slam.features.base import FeatureDetector, Features, Matcher
 from kitti_slam.geometry.transforms import compose_se3, invert_pose
 from kitti_slam.geometry.triangulation import triangulate_stereo
 from kitti_slam.odometry.base import LandmarkFilter, MotionFilter, PoseEstimator
+from kitti_slam.odometry.diagnostics import REGISTERED, FrameDiagnostics
 from kitti_slam.odometry.timing import NullStageTimer, StageTimer
 
 
@@ -106,9 +107,20 @@ class StereoVOPipeline:
         self.interpolate_on_skip = interpolate_on_skip
         self.min_points = min_points
 
-    def _skip(self, state: FrameState, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr) -> FrameState:
+    def _skip(
+        self,
+        state: FrameState,
+        left_curr_img,
+        right_curr_img,
+        left_feat_curr,
+        right_feat_curr,
+        diag: dict | None = None,
+        outcome: str = "",
+    ) -> FrameState:
         """Shared tail of both skip sites: advance prev <- curr, optionally
         interpolate C_k via T_prev, leave T_prev untouched."""
+        if diag is not None:
+            diag["outcome"] = outcome
         C = state.C
         if self.interpolate_on_skip:
             C = compose_se3(C, state.T_prev)
@@ -129,8 +141,12 @@ class StereoVOPipeline:
         calib,
         K,
         timer: StageTimer | NullStageTimer | None = None,
+        diag: dict | None = None,
     ) -> FrameState:
-        """One iteration of the shared loop body (VO_constrained.py L102-211)."""
+        """One iteration of the shared loop body (VO_constrained.py L102-211).
+
+        When `diag` is a dict, the frame's outcome and counts are written into it
+        (see kitti_slam.odometry.diagnostics); the returned state is the same."""
         if timer is None:
             timer = NullStageTimer()
 
@@ -154,37 +170,59 @@ class StereoVOPipeline:
                 temporal_matches, stereo_matches_prev, left_feat_prev, right_feat_prev, left_feat_curr
             )
 
+        if diag is not None:
+            diag["temporal_matches"] = len(temporal_matches)
+            diag["stereo_matches"] = len(stereo_matches_prev)
+            diag["associated"] = corr.left_prev.shape[0]
+
         # Note 4: N==0 correspondences -> immediate skip, no triangulation call.
         if corr.left_prev.shape[0] == 0:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr)
+            return self._skip(
+                state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "no_correspondences"
+            )
 
         with timer.stage("triangulate"):
             points_3d = triangulate_stereo(calib, corr.left_prev, corr.right_prev)
         left_curr_pts = corr.left_curr
+
+        if diag is not None:
+            finite = np.isfinite(points_3d).all(axis=1)
+            diag["nonfinite_points"] = int(np.count_nonzero(~finite))
+            diag["nonpositive_depth_points"] = int(np.count_nonzero(finite & (points_3d[:, 2] <= 0)))
 
         if self.landmark_filter is not None:
             mask = self.landmark_filter.valid_mask(points_3d, calib)
             points_3d = points_3d[mask]
             left_curr_pts = left_curr_pts[mask]
 
+        if diag is not None:
+            diag["landmarks"] = points_3d.shape[0]
+
         # Note 3: the <4 guard is checked once, after any landmark filtering.
         if points_3d.shape[0] < self.min_points:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr)
+            return self._skip(
+                state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "too_few_points"
+            )
 
         with timer.stage("pnp"):
             estimate = self.pose_estimator.estimate(points_3d, left_curr_pts, K)
+        if diag is not None:
+            diag["pnp_retval"] = "" if estimate.retval is None else int(estimate.retval)
+            diag["pnp_inliers"] = 0 if estimate.inliers is None else len(estimate.inliers)
         if not estimate.success:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr)
+            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "pnp_failed")
 
         with timer.stage("motion"):
             # Note 5: orthogonalize the camera-frame R first, then invert to world frame.
             R_ortho = self.motion_filter.refine_rotation(estimate.R)
             R_world, t_world = invert_pose(R_ortho, estimate.t)
-            plausible = self.motion_filter.is_plausible(R_world, t_world)
+            rejection = self.motion_filter.rejection_reason(R_world, t_world)
 
-        if not plausible:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr)
+        if rejection is not None:
+            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, rejection)
 
+        if diag is not None:
+            diag["outcome"] = REGISTERED
         T = np.hstack((R_world, t_world.reshape(3, 1)))
         C = compose_se3(state.C, T)
 
@@ -202,6 +240,7 @@ class StereoVOPipeline:
         sequence: StereoSequence,
         progress: bool = False,
         timer: StageTimer | NullStageTimer | None = None,
+        diagnostics: FrameDiagnostics | None = None,
     ) -> np.ndarray:
         if timer is None:
             timer = NullStageTimer()
@@ -231,7 +270,10 @@ class StereoVOPipeline:
             with timer.frame():
                 with timer.stage("io"):
                     frame = sequence[k]
-                state = self.step(state, frame.left, frame.right, calib, K, timer=timer)
+                diag = {"frame": k} if diagnostics is not None else None
+                state = self.step(state, frame.left, frame.right, calib, K, timer=timer, diag=diag)
+            if diagnostics is not None:
+                diagnostics.append(diag)
             writer.append(state.C)
 
         return writer.as_array()

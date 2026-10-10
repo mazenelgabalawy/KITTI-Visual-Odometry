@@ -72,7 +72,10 @@ python scripts/run_vo.py --config configs/base.yaml          # all sequences in 
 
 Each sequence is written to `<output>/XX/poses.txt` in KITTI format: 3×4
 camera-to-world pose, row-major, `%.6e`, one line per frame. The first line is the identity.
-Add `--timing` for a per-stage timing table. Outputs that resolve into
+Add `--timing` for a per-stage timing table. Add `--diagnostics` to also write
+`<output>/XX/diagnostics.csv`: one row per frame with the registration outcome
+(registered, or why it failed) and the match, point, and PnP inlier counts behind
+it. Diagnostics do not change the poses. Outputs that resolve into
 `output_base/`, `output_constrained/`, or `reference/` are refused.
 
 ## Evaluate

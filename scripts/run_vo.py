@@ -21,6 +21,7 @@ from kitti_slam.config.loader import ConfigError, load_config  # noqa: E402
 from kitti_slam.datasets.kitti import KittiSequence  # noqa: E402
 from kitti_slam.datasets.prefetch import PrefetchingSequence  # noqa: E402
 from kitti_slam.evaluation.trajectory_io import TrajectoryWriter  # noqa: E402
+from kitti_slam.odometry.diagnostics import FrameDiagnostics  # noqa: E402
 from kitti_slam.odometry.factory import build_pipeline  # noqa: E402
 from kitti_slam.odometry.timing import StageTimer  # noqa: E402
 from kitti_slam.protected_paths import ProtectedPathError, check_writable  # noqa: E402
@@ -65,6 +66,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help="Enable per-stage wall-time instrumentation and print a summary table per sequence (default off).",
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        default=False,
+        help="Write a per-frame diagnostics.csv next to poses.txt (default off; poses are unchanged).",
+    )
     return parser.parse_args(argv)
 
 
@@ -103,7 +110,8 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             timer = StageTimer() if args.timing else None
-            poses = pipeline.run(sequence, progress=args.progress, timer=timer)
+            diagnostics = FrameDiagnostics() if args.diagnostics else None
+            poses = pipeline.run(sequence, progress=args.progress, timer=timer, diagnostics=diagnostics)
 
             seq_output_dir = guard_output_dir(resolved_output / f"{seq:02d}")
             seq_output_dir.mkdir(parents=True, exist_ok=True)
@@ -116,6 +124,11 @@ def main(argv: list[str] | None = None) -> int:
                 writer.append(pose)
             writer.write(poses_path)
             print(f"Wrote {len(poses)} poses to {poses_path}")
+
+            if diagnostics is not None:
+                diagnostics_path = guard_output_dir(seq_output_dir / "diagnostics.csv")
+                diagnostics.write_csv(diagnostics_path)
+                print(f"Wrote {len(diagnostics.rows)} diagnostics rows to {diagnostics_path}")
 
             if timer is not None:
                 timer.print_summary(label=f"sequence {seq:02d}")

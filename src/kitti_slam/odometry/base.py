@@ -20,6 +20,7 @@ class PoseEstimate:
     t: np.ndarray | None
     inliers: np.ndarray | None
     success: bool
+    retval: bool | None = None  # the solver's own return value, when a solver ran
 
 
 class PoseEstimator(ABC):
@@ -44,3 +45,8 @@ class MotionFilter(ABC):
 
     @abstractmethod
     def is_plausible(self, R_world: np.ndarray, t_world: np.ndarray) -> bool: ...
+
+    def rejection_reason(self, R_world: np.ndarray, t_world: np.ndarray) -> str | None:
+        """None if the motion is plausible, else the diagnostics outcome naming the
+        gate that rejected it."""
+        return None if self.is_plausible(R_world, t_world) else "implausible_motion"
