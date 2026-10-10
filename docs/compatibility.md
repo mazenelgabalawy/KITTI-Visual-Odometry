@@ -37,6 +37,7 @@ a separate key.
 | `min_depth_multiplier`, `relative_depth_uncertainty_threshold` | `landmark_filter.*` | Minimum depth = multiplier × baseline (m). The uncertainty rule `σ_z/z < τ` is equivalent to disparity > 1/τ px. |
 | — | `triangulation.min_abs_w` | Landmark validity (BUG-003, §4b): a triangulated point reaches PnP only if it is finite, in front of both cameras, and its unit-norm homogeneous `\|w\|` ≥ `min_abs_w`. `\|w\|` ≈ 1/range (1/m), so `1.0e-4` rejects points beyond about 10 km. |
 | `pnp_confidence`, `pnp_iterations_count` | `pnp.confidence`, `pnp.iterations_count` | `cv2.solvePnPRansac` arguments. The reprojection threshold is OpenCV's default of 8 px. |
+| — | `pnp.min_inliers` | A solve with fewer RANSAC inliers is rejected as a failed registration (BUG-002, §4b). `6` rejects exactly the solves with no inlier beyond OpenCV's 5-point minimal sample. |
 | — | `pnp.seed` | Sets `cv2.setRNGSeed`. It has **no effect** on the current solver path, whose RANSAC uses a fixed internal RNG (BUG-014). |
 | `max_translation` | `motion.max_translation` | Rejects a frame whose relative translation exceeds this value (m). |
 | `max_pitch_deg` | `motion.max_pitch_deg` | **Misnamed (BUG-012):** this setting gates the second Euler component, the rotation about camera *y*. That axis is the vehicle's heading (yaw) axis. It is not pitch. |
@@ -81,6 +82,7 @@ profiles in SI units.
 |---|---|---|---|
 | BUG-013 | A failed registration held the pose in base (zero velocity) and repeated the last relative motion in constrained (`interpolate_on_skip`) | Every failed registration (no correspondences, too few points, failed or rejected PnP, implausible motion) propagates the last accepted relative transform: constant velocity, in both configurations. Propagation does not change the transform, and the next registration starts from the current frame | None on the shipped configs: no registration failed on any sequence before this change, so all 22 trajectories are byte-identical |
 | BUG-003 | Every triangulated point reached PnP, including points behind the cameras and points with near-zero homogeneous `w` (zero disparity, z up to 1e25 m) | One validity check in both configurations: finite coordinates, positive depth in both cameras, `\|w\|` ≥ `triangulation.min_abs_w` | Base only: it rejects 2.8% (seq 04) to 20.1% (seq 01) of associated points; on seq 01, 11.3% are behind the cameras and 8.7% lie beyond 10 km. Constrained is unchanged: its matcher bounds disparity to [1, 64] px |
+| BUG-002 | The `solvePnPRansac` return value was ignored and its outputs were composed into the trajectory unchecked | A solve is accepted only if the solver succeeds, its rotation and translation are finite, and it has at least `pnp.min_inliers` inliers; otherwise it is a failed registration (BUG-013). The inliers are kept on the estimate | The solver never failed and no output was nonfinite. One frame on all of KITTI had fewer than 6 inliers: constrained seq 01 frame 435 (5 inliers of 8 landmarks), now propagated |
 
 ## 5. Legacy retirement (plan task B7, executed 2026-10-08)
 

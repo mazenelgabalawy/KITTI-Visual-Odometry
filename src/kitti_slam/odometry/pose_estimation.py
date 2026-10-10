@@ -50,10 +50,18 @@ class PnPRansacEstimator(PoseEstimator):
             iterationsCount=self.cfg.iterations_count,
         )
 
+        # BUG-002: honor the solver's return value and validate its outputs. A
+        # rejected solve is a failed registration; `inliers` is kept either way.
+        retval = bool(retval)
+        if not retval or rvec is None or tvec is None:
+            return PoseEstimate(R=None, t=None, inliers=inliers, success=False, retval=retval)
         R, _ = cv2.Rodrigues(rvec)
         t = tvec.reshape(3)
+        num_inliers = 0 if inliers is None else len(inliers)
+        if not (np.isfinite(R).all() and np.isfinite(t).all()) or num_inliers < self.cfg.min_inliers:
+            return PoseEstimate(R=None, t=None, inliers=inliers, success=False, retval=retval)
 
-        return PoseEstimate(R=R, t=t, inliers=inliers, success=True, retval=bool(retval))
+        return PoseEstimate(R=R, t=t, inliers=inliers, success=True, retval=retval)
 
 
 class DepthUncertaintyFilter(LandmarkFilter):

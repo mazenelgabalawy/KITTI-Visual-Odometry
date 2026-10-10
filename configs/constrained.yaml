@@ -38,6 +38,8 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 2000
+  # Reject a solve with fewer RANSAC inliers than this (a failed registration).
+  min_inliers: 6
   seed: 42
 
 motion:

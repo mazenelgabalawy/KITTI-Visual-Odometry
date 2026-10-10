@@ -25,6 +25,8 @@ def test_load_base_yaml_roundtrip(repo_root):
     assert cfg.pnp.confidence == 0.99
     assert cfg.pnp.iterations_count == 100
     assert cfg.pnp.seed == 42
+    assert cfg.pnp.min_inliers == 6
+    assert cfg.triangulation.min_abs_w == 1.0e-4
     assert cfg.motion == MotionConfig()
     assert cfg.grid_filter is None
     assert cfg.landmark_filter is None
@@ -47,6 +49,8 @@ def test_load_constrained_yaml_roundtrip(repo_root):
     assert cfg.landmark_filter.min_depth_multiplier == 3
     assert cfg.landmark_filter.relative_depth_uncertainty_threshold == 0.5
     assert cfg.pnp.iterations_count == 2000
+    assert cfg.pnp.min_inliers == 6
+    assert cfg.triangulation.min_abs_w == 1.0e-4
     assert cfg.motion.max_translation == 15.0
     assert cfg.motion.max_pitch_deg == 30
     assert cfg.motion.orthogonalize_alpha == 0.8
@@ -76,6 +80,7 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )
@@ -105,6 +110,7 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )
@@ -135,6 +141,7 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )
@@ -204,6 +211,7 @@ triangulation:
 pnp:
   confidence: 1
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )
@@ -237,6 +245,7 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )
@@ -274,6 +283,7 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  min_inliers: 6
 motion: {}
 """
     )

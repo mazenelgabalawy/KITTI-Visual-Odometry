@@ -25,6 +25,8 @@ triangulation:
 pnp:
   confidence: 0.99
   iterations_count: 100
+  # Reject a solve with fewer RANSAC inliers than this (a failed registration).
+  min_inliers: 6
   seed: 42
 
 # No planar refinement or plausibility gates. A failed registration propagates

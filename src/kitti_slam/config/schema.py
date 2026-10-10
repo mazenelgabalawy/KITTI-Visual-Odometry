@@ -56,6 +56,7 @@ class LandmarkFilterConfig:
 class PnPConfig:
     confidence: float
     iterations_count: int
+    min_inliers: int  # solves with fewer RANSAC inliers are rejected (BUG-002)
     seed: int | None = None
 
 

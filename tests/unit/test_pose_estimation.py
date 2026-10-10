@@ -48,7 +48,7 @@ def test_pnp_recovers_known_pose():
     points_cam = (R_true @ points_3d_world.T).T + t_true
     points_2d = _project(K, points_cam)
 
-    cfg = PnPConfig(confidence=0.999, iterations_count=1000, seed=1234)
+    cfg = PnPConfig(confidence=0.999, iterations_count=1000, min_inliers=6, seed=1234)
     estimator = PnPRansacEstimator(cfg)
 
     result = estimator.estimate(points_3d_world, points_2d, K)
@@ -73,7 +73,7 @@ def test_pnp_deterministic_with_seed():
     points_cam = (R_true @ points_3d.T).T + t_true
     points_2d = _project(K, points_cam)
 
-    cfg = PnPConfig(confidence=0.999, iterations_count=500, seed=99)
+    cfg = PnPConfig(confidence=0.999, iterations_count=500, min_inliers=6, seed=99)
     estimator = PnPRansacEstimator(cfg)
 
     result_a = estimator.estimate(points_3d.copy(), points_2d.copy(), K)
@@ -88,7 +88,7 @@ def test_pnp_too_few_points_fails():
     points_3d = np.array([[1.0, 2.0, 10.0], [0.5, -1.0, 15.0], [-1.0, 0.0, 20.0]])
     points_2d = _project(K, points_3d)
 
-    cfg = PnPConfig(confidence=0.999, iterations_count=100, seed=1)
+    cfg = PnPConfig(confidence=0.999, iterations_count=100, min_inliers=6, seed=1)
     estimator = PnPRansacEstimator(cfg)
 
     result = estimator.estimate(points_3d, points_2d, K)
@@ -134,3 +134,37 @@ def test_depth_filter_specification():
     tight_filter = DepthUncertaintyFilter(tight_cfg)
     far_point = np.array([[0.0, 0.0, 1000.0]])
     assert not tight_filter.valid_mask(far_point, calib)[0]
+
+
+def _synthetic_pnp_problem(n=40, seed=11):
+    rng = np.random.default_rng(seed)
+    points_3d = np.stack([rng.uniform(-5, 5, n), rng.uniform(-2, 2, n), rng.uniform(5, 50, n)], axis=1)
+    t_true = np.array([0.1, 0.0, 1.0])
+    return points_3d, _project(K, points_3d + t_true)
+
+
+def _estimator(min_inliers=6):
+    return PnPRansacEstimator(PnPConfig(confidence=0.999, iterations_count=200, min_inliers=min_inliers, seed=1))
+
+
+def test_failed_solve_is_a_failure(monkeypatch):
+    monkeypatch.setattr(cv2, "solvePnPRansac", lambda *a, **k: (False, None, None, None))
+    result = _estimator().estimate(*_synthetic_pnp_problem(), K)
+    assert (result.success, result.retval, result.R, result.t) == (False, False, None, None)
+
+
+def test_nonfinite_solve_is_a_failure(monkeypatch):
+    inliers = np.arange(40).reshape(-1, 1)
+    bad = (True, np.array([[np.nan], [0.0], [0.0]]), np.zeros((3, 1)), inliers)
+    monkeypatch.setattr(cv2, "solvePnPRansac", lambda *a, **k: bad)
+    result = _estimator().estimate(*_synthetic_pnp_problem(), K)
+    assert result.success is False and result.retval is True
+    assert result.inliers is inliers
+
+
+def test_too_few_inliers_is_a_failure():
+    points_3d, points_2d = _synthetic_pnp_problem()
+    ok = _estimator(min_inliers=6).estimate(points_3d, points_2d, K)
+    assert ok.success and len(ok.inliers) == 40
+    rejected = _estimator(min_inliers=41).estimate(points_3d, points_2d, K)
+    assert rejected.success is False and rejected.retval is True and len(rejected.inliers) == 40
