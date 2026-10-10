@@ -1,7 +1,7 @@
 # Stereo Visual Odometry on KITTI (seminar code, corrected)
 This branch holds the original seminar code (`VO_base.py`, `VO_constrained.py`, `filter.py`, `utils.py`) with the corrections that were found and fixed later. The maintained version of the pipeline is the `kitti_slam` package on the `main` branch. With the same parameters, both produce byte-identical trajectories on all 11 labeled sequences in both configurations.
 
-The original code, as it produced the results in `VO_Seminar.pdf`, is commit `b8796f7`. Statements in the report that do not match that code are corrected in [VO_Seminar_errata.md](VO_Seminar_errata.md).
+The original code, as it produced the results in `VO_Seminar.pdf`, is commit `b8796f7`.
 
 # Setting up the Environment
 Create a Python virtual environment and install all dependencies using:

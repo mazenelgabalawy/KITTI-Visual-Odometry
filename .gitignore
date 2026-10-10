@@ -6,3 +6,18 @@ data_odometry_gray.zip
 .vscode/
 __pycache__/
 results/
+*.pyc
+.bench/
+sequences
+ground_truth/
+data_odometry_poses.zip
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# Assistant instructions, plans, reports, and audits are never committed
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+docs/plan/
+docs/reports/
+docs/audit/
