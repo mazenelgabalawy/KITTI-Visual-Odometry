@@ -37,9 +37,7 @@ markers = [
 target-version = "py312"
 line-length = 120
 # Everything that is code is linted. Excluded: historical result trees,
-# frozen reference snapshots (they hold byte copies of the removed legacy
-# sources that produced them and must never be reformatted), scratch results,
-# docs, and the local venv.
+# frozen reference snapshots, scratch results, docs, and the local venv.
 extend-exclude = [
     "output_base",
     "output_constrained",
@@ -55,26 +53,8 @@ extend-exclude = [
 # E/F/W: pyflakes + pycodestyle core. I: import sorting. UP: pyupgrade syntax
 # modernization. B: bugbear correctness/footgun checks. SIM: flake8-simplify.
 # NPY: numpy-specific rules. pep8-naming (N) is deliberately NOT selected so
-# short math-y identifiers ported verbatim from the legacy code (R, K, P0, t0,
-# ...) don't need renaming.
+# short math identifiers (R, K, P0, t0, ...) don't need renaming.
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
-ignore = [
-    # zip() without strict= fires on a couple of verbatim-ported numeric loops
-    # (e.g. grid_filter.py, which is a byte-for-byte port of filter.py's
-    # cluster_keypoints). Adding strict= there is a behavior tweak, not a
-    # pure-formatting fix, so it's out of scope for this lint pass; addressed
-    # per-file below where it's safe (test files) and ignored where the code
-    # is a verbatim numeric port.
-]
-
-[tool.ruff.lint.per-file-ignores]
-# Ported verbatim from filter.py's cluster_keypoints (see module docstring) -
-# rows/cols are always same-length arrays derived from the same keypoint set,
-# so strict= would be a no-op, but we leave the ported body untouched.
-"src/kitti_slam/features/grid_filter.py" = ["B905"]
-# Ported verbatim from VO_constrained.py's plausibility gate (see module
-# docstring); collapsing the nested `if`s restructures ported control flow.
-"src/kitti_slam/odometry/motion_filters.py" = ["SIM102"]
 
 [tool.ruff.format]
 # Defaults (double quotes, trailing commas, etc.) - no project-specific overrides.

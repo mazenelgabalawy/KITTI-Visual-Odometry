@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 """Draw a pipeline config's features and matches for one KITTI frame.
 
-Replaces the legacy figure scripts (features.py, detectors.py). It uses the
-same detector and matchers the pipeline builds from the config, so the images
-show what VO actually sees. Images written to --output:
+It uses the same detector and matchers the pipeline builds from the config, so
+the images show what VO actually sees. Images written to --output:
 
     keypoints.png         ORB keypoints before (top) and after (bottom) grid selection
     stereo_matches.png    left/right matches: raw cross-checked brute force (top)

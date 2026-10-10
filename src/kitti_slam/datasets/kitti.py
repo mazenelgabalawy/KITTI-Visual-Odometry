@@ -1,8 +1,5 @@
-"""KITTI odometry benchmark stereo sequence loader.
-
-Ports utils.load_stereo_pair and the sequence-length/calib-file discovery
-logic from VO_base.py / VO_constrained.py (L41-61 in the latter).
-"""
+"""KITTI odometry benchmark stereo sequence loader: grayscale image_0/image_1
+pairs and calib.txt of one sequence directory."""
 
 from __future__ import annotations
 

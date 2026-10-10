@@ -1,14 +1,9 @@
 """Stereo camera calibration parsing (KITTI calib.txt format).
 
-Ports the calibration handling from VO_constrained.py (L57-77) and
-VO_base.py (L44-60): parse the first two lines of a KITTI ``calib.txt``
-into 3x4 projection matrices, decompose them with
-``cv2.decomposeProjectionMatrix``, normalize the resulting homogeneous
-translation vector, and derive the stereo baseline and focal length.
-
-Note: the legacy code also computes the essential/fundamental matrices
-from these values, but never uses them (VO_constrained.py L78-83,
-VO_base.py L62-67). That computation is intentionally NOT ported here.
+Parse the first two lines of a KITTI ``calib.txt`` into 3x4 projection
+matrices, decompose them with ``cv2.decomposeProjectionMatrix``, normalize the
+resulting homogeneous translation vectors, and derive the stereo baseline and
+focal length.
 """
 
 from __future__ import annotations
@@ -42,7 +37,7 @@ class StereoCalibration:
 
     @classmethod
     def from_projection_matrices(cls, P0: np.ndarray, P1: np.ndarray) -> StereoCalibration:
-        """Replicates VO_constrained.py L63-76 exactly (minus the unused E/F)."""
+        """Intrinsics, baseline, and focal length from the two projection matrices."""
         K0, R0, t0 = cv2.decomposeProjectionMatrix(P0)[:3]
         K1, R1, t1 = cv2.decomposeProjectionMatrix(P1)[:3]
 

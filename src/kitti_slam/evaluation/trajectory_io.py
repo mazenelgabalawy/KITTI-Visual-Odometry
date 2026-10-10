@@ -1,8 +1,6 @@
-"""Trajectory writing/loading, byte-identical to utils.save_transformation_matrix.
-
-Ports utils.py L11-23 (save_transformation_matrix): the top-left 3x4 block of
-each pose, flattened row-major, formatted as ``' '.join(f"{x:.6e}" for x in
-row)``, one line per pose.
+"""Trajectory writing and loading in the KITTI pose format: the top-left 3x4
+block of each pose, flattened row-major, formatted as
+``' '.join(f"{x:.6e}" for x in row)``, one line per pose.
 """
 
 from __future__ import annotations
@@ -19,8 +17,8 @@ def _format_pose_line(C: np.ndarray) -> str:
 
 
 class TrajectoryWriter:
-    """Accumulates 4x4 (or 3x4) poses and writes them in the legacy KITTI
-    pose-file format."""
+    """Accumulates 4x4 (or 3x4) poses and writes them in the KITTI pose-file
+    format."""
 
     def __init__(self) -> None:
         self._poses: list[np.ndarray] = []

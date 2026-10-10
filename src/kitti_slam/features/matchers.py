@@ -1,4 +1,4 @@
-"""Descriptor matchers, ported from legacy filter.BF_matcher and filter.rectified_stereo_matcher."""
+"""Descriptor matchers: brute force, and epipolar-constrained matching for rectified stereo."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from kitti_slam.features.base import Features, Matcher
 class BruteForceMatcher(Matcher):
     """Brute-force descriptor matcher.
 
-    With ratio_threshold=None this reproduces the plain `bf.match(...)` path used by
-    VO_base.py (raw matches, no sorting/truncation). With ratio_threshold set, this
-    reproduces filter.BF_matcher's `inliner_threshold` behavior: sort by distance and
-    keep the top `int(len(matches) * ratio_threshold)` matches.
+    With ratio_threshold=None it returns the raw `cv2.BFMatcher.match` result (no
+    sorting or truncation). With ratio_threshold set, it sorts by distance and keeps
+    the best `int(len(matches) * ratio_threshold)` matches (a kept fraction, not a
+    Lowe ratio test).
     """
 
     def __init__(self, norm: str, cross_check: bool, ratio_threshold: float | None = None):
@@ -54,7 +54,7 @@ class BruteForceMatcher(Matcher):
 
 
 class RectifiedStereoMatcher(Matcher):
-    """Epipolar-constrained stereo matcher, ported from filter.rectified_stereo_matcher."""
+    """Epipolar-constrained stereo matcher for rectified pairs (row band + disparity range)."""
 
     def __init__(self, cfg: StereoMatcherConfig):
         self.cfg = cfg

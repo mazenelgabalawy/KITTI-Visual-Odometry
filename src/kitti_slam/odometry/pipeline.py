@@ -1,53 +1,36 @@
-"""Stereo visual-odometry pipeline: a near-transcription of the shared loop body
-in VO_constrained.py (L96-211) and VO_base.py (L76-139).
+"""Stereo visual-odometry pipeline: one loop shared by every configuration.
 
-Both legacy scripts run the *same* algorithm skeleton; they differ only in which
-concrete components are plugged in:
-  - detector:        OrbDetector alone (base) vs. OrbDetector + GridKeypointFilter (constrained)
-  - temporal matcher: raw bf.match (base) vs. BF_matcher with ratio_threshold (constrained)
-  - stereo matcher:   raw bf.match reused as a BruteForceMatcher (base) vs.
-                      RectifiedStereoMatcher with epipolar+disparity gating (constrained)
-  - landmark filter:  none (base) vs. DepthUncertaintyFilter (constrained)
-  - motion filter:    NullMotionFilter (base, always plausible, no orthogonalization)
-                      vs. PlanarMotionFilter (constrained)
+Configurations differ only in the components factory.py injects:
+  - detector:         OrbDetector, optionally with a GridKeypointFilter
+  - temporal matcher: BruteForceMatcher, optionally keeping the best fraction of matches
+  - stereo matcher:   BruteForceMatcher, or RectifiedStereoMatcher (row band and
+                      disparity range checked before ranking)
+  - landmark filter:  none, or DepthUncertaintyFilter
+  - motion filter:    NullMotionFilter (no refinement, always plausible), or
+                      PlanarMotionFilter (planar rotation refinement, translation
+                      and heading gates)
+step() and run() never branch on which configuration is running.
 
-StereoVOPipeline.step()/run() implement that single skeleton; base-vs-constrained
-behavior falls out purely from which components are injected (see factory.py),
-never from a branch on "which variant am I".
+Notes:
 
-Transcription notes (see also module docstrings on the components used here):
-
-1. Feature re-detection every step, never a persisted descriptor cache. VO_base.py
-   L86-88 re-runs orb.detectAndCompute on left_prev/right_prev *every iteration*,
-   even though left_prev/right_prev were already featured in a prior iteration —
-   it never caches descriptors across iterations, only the raw images. VO_constrained.py
-   instead detects the "prev" pair once (L98-99) and carries the Features objects
-   forward across iterations (L142-146, L181-185, L204-208), only re-detecting
-   "curr". Because ORB detection (+ grid filtering) is a deterministic pure function
-   of (image, config) with no RNG involved, carrying the previously-detected
-   Features forward (as VO_constrained.py does) is numerically identical to
-   VO_base.py's redetection of the same prev images. This pipeline therefore
-   carries prev features forward in FrameState and detects only the current
-   pair each step — reproducing both variants' numerics at half the detection
-   cost of redetecting prev every iteration.
-
-2. Failed registration assumes constant velocity (BUG-013). Every failure --
+1. Each image is detected once: the previous frame's features are carried
+   forward in FrameState and only the current pair is detected. Detection is a
+   deterministic function of (image, config), so this equals re-detecting the
+   previous frame, at half the cost.
+2. A failed registration assumes constant velocity (BUG-013). Every failure --
    no correspondences, too few points, a failed or rejected PnP solve, or
    implausible motion -- propagates C_k = C_{k-1} @ T_last, where T_last is the
    last accepted relative transform (identity before the first). Propagation
-   does not change T_last, and prev image/features advance to curr, so the
-   next registration runs from frame k. Legacy base held the pose instead
-   (zero velocity); legacy constrained already repeated the last motion.
-3. The <4-points guard is checked exactly once, AFTER any landmark filtering
-   (VO_constrained.py L136, VO_base.py L106 -- base has no landmark filter so
-   there the check is trivially "right after triangulation").
-4. N==0 correspondences (intersect_temporal_stereo returns empty arrays rather
-   than raising, Module 3 change) are a failed registration (note 2) rather than
-   calling cv2.triangulatePoints with empty input.
-5. Motion gate operates on WORLD-frame R, t: refine_rotation() is applied to the
-   camera-frame R from PnP *first* (VO_constrained.py L164), then invert_pose()
-   converts to world frame (R_cam.T, -R_cam.T @ t, mirroring L167-168), and
-   is_plausible() is evaluated on that world-frame pair (L174).
+   does not change T_last, and the current frame becomes the previous one, so
+   the next registration runs from frame k.
+3. Triangulated points pass the landmark validity check (finite, positive depth
+   in both cameras, |w| >= min_abs_w; BUG-003) and then the optional landmark
+   filter. The min_points guard is checked once, after both.
+4. Zero correspondences are a failed registration (note 2); triangulation is
+   never called with empty input.
+5. The motion filter refines the camera-frame rotation from PnP first; the pose
+   is then inverted to the world frame (R.T, -R.T @ t), and the gates evaluate
+   that world-frame motion.
 """
 
 from __future__ import annotations
@@ -135,7 +118,7 @@ class StereoVOPipeline:
         timer: StageTimer | NullStageTimer | None = None,
         diag: dict | None = None,
     ) -> FrameState:
-        """One iteration of the shared loop body (VO_constrained.py L102-211).
+        """Registers the current frame against the previous one (module notes 1-5).
 
         When `diag` is a dict, the frame's outcome and counts are written into it
         (see kitti_slam.odometry.diagnostics); the returned state is the same."""
@@ -146,9 +129,7 @@ class StereoVOPipeline:
             left_feat_curr = self.detector.detect(left_curr_img)
             right_feat_curr = self.detector.detect(right_curr_img)
 
-        # Note 1: prev features are carried forward in FrameState, matching
-        # VO_constrained.py L142-146/L204-208; see module docstring for why
-        # this is numerically identical to VO_base.py's literal redetection.
+        # Note 1: the previous frame's features are carried forward in FrameState.
         left_feat_prev = state.left_features
         right_feat_prev = state.right_features
 
@@ -195,7 +176,7 @@ class StereoVOPipeline:
         if diag is not None:
             diag["landmarks"] = points_3d.shape[0]
 
-        # Note 3: the <4 guard is checked once, after any landmark filtering.
+        # Note 3: the min_points guard is checked once, after validity and filtering.
         if points_3d.shape[0] < self.min_points:
             return self._propagate(
                 state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "too_few_points"

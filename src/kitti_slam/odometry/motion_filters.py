@@ -1,15 +1,9 @@
-"""Planar-motion rotation refinement and translation/pitch plausibility gating.
+"""Planar-motion rotation refinement and translation/heading plausibility gating.
 
-Ports:
-- orthogonalize_to_planar_motion: filter.py L429-469 (verbatim numerics; see
-  the dead-assignment note below).
-- Translation/pitch gate: VO_constrained.py L174 (the constrained pipeline's
-  skip condition).
-
-Dead-assignment note (filter.py L445): `R_planar = R_ortho` is assigned and
-then immediately overwritten by the `R_planar = np.array([...])` block at
-L454-458 before R_planar is ever read. No code path reads R_planar between
-L445 and L454. It is therefore provably dead and is dropped in this port.
+The refinement blends the closest proper rotation with its best yaw-only
+(planar) rotation and re-orthonormalizes. The gates reject a relative motion
+whose translation or heading change exceeds the configured limit; the heading
+limit is configured as `max_pitch_deg` (it gates the rotation about camera y).
 """
 
 from __future__ import annotations
@@ -22,9 +16,8 @@ from kitti_slam.odometry.base import MotionFilter
 
 
 def _orthogonalize_to_planar_motion(R: np.ndarray, alpha: float = 0.8) -> np.ndarray:
-    """Verbatim port of filter.py L429-469 (see module docstring for the one
-    documented deviation: dropping the provably-dead `R_planar = R_ortho`
-    assignment)."""
+    """Pull R toward the closest rotation about camera y (yaw only):
+    alpha * R_planar + (1 - alpha) * R_ortho, re-orthonormalized."""
     U, S, Vt = np.linalg.svd(R)
     R_ortho = U @ Vt  # Closest orthonormal matrix
     if np.linalg.det(R_ortho) < 0:
@@ -58,8 +51,7 @@ def _orthogonalize_to_planar_motion(R: np.ndarray, alpha: float = 0.8) -> np.nda
 
 
 class PlanarMotionFilter(MotionFilter):
-    """Ports the constrained pipeline's orthogonalization + gating (VO_constrained.py
-    L164, L174)."""
+    """Planar rotation refinement plus translation and heading gates."""
 
     def __init__(self, cfg: MotionConfig) -> None:
         self.cfg = cfg
@@ -74,20 +66,16 @@ class PlanarMotionFilter(MotionFilter):
         return self.rejection_reason(R_world, t_world) is None
 
     def rejection_reason(self, R_world: np.ndarray, t_world: np.ndarray) -> str | None:
-        # VO_constrained.py L174:
-        #   if np.linalg.norm(t_cam) > max_translation or abs(pitch) > np.deg2rad(max_pitch_deg):
-        #       <skip frame>
-        # i.e. plausible iff norm(t) <= max_translation AND abs(pitch) <= deg2rad(max_pitch_deg).
-        # `pitch` is the second (index 1) component of rotationMatrixToEulerAngles: the
-        # rotation about camera y, which is the heading axis (BUG-012).
-        if self.cfg.max_translation is not None:
-            if np.linalg.norm(t_world) > self.cfg.max_translation:
-                return "implausible_translation"
+        # Plausible iff norm(t) <= max_translation and |heading| <= max_pitch_deg, where
+        # the heading is the second Euler component of rotation_to_euler: the rotation
+        # about camera y (the setting's name says "pitch"; see BUG-012).
+        if self.cfg.max_translation is not None and np.linalg.norm(t_world) > self.cfg.max_translation:
+            return "implausible_translation"
 
-        if self.cfg.max_pitch_deg is not None:
-            pitch = rotation_to_euler(R_world)[1]
-            if abs(pitch) > np.deg2rad(self.cfg.max_pitch_deg):
-                return "implausible_heading"
+        if self.cfg.max_pitch_deg is not None and abs(rotation_to_euler(R_world)[1]) > np.deg2rad(
+            self.cfg.max_pitch_deg
+        ):
+            return "implausible_heading"
 
         return None
 

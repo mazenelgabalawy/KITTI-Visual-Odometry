@@ -1,8 +1,6 @@
-"""Grid-based keypoint downsampling, ported from legacy filter.cluster_keypoints.
-
-The body below is copied verbatim from filter.py's cluster_keypoints (cell-index
-computation, sort-by-response, per-cell cap, output ordering) and adapted only to
-operate on a Features object + explicit image_shape instead of keypoints/descriptors/image.
+"""Grid-based keypoint downsampling: at most max_per_grid keypoints per grid cell,
+the strongest by response. Cells are visited in first-occurrence order and keep
+the input order among equal responses.
 """
 
 from __future__ import annotations
@@ -45,7 +43,7 @@ class GridKeypointFilter:
 
         # Group by grid cell
         grid_groups = defaultdict(list)
-        for idx, (row, col) in enumerate(zip(rows, cols)):
+        for idx, (row, col) in enumerate(zip(rows, cols, strict=True)):
             grid_groups[(row, col)].append(idx)
 
         # Select top max_per_grid by response per cell

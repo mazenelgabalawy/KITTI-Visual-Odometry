@@ -1,6 +1,6 @@
 """Write protection for historical baselines and frozen reference snapshots.
 
-`output_base/` and `output_constrained/` hold the historical legacy results;
+`output_base/` and `output_constrained/` hold the historical results of the original scripts;
 `reference/` holds local reference snapshots. Runners and evaluators must
 never write into any of them.
 

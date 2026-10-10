@@ -1,14 +1,4 @@
-"""PnP pose estimation and depth-uncertainty landmark filtering.
-
-Ports:
-- solvePnPRansac call site: VO_constrained.py L158 and VO_base.py L119-120
-  (identical kwargs in both: confidence=pnp_confidence,
-  iterationsCount=pnp_iterations_count -- no other kwargs differ between the
-  two legacy call sites, so PnPConfig's existing `confidence` /
-  `iterations_count` fields are sufficient; nothing extra was invented).
-- <4 points guard: VO_constrained.py L136 / VO_base.py L106.
-- Depth/uncertainty landmark filter: VO_constrained.py L123-128.
-"""
+"""PnP pose estimation (cv2.solvePnPRansac) and depth-uncertainty landmark filtering."""
 
 from __future__ import annotations
 
@@ -22,14 +12,14 @@ from kitti_slam.odometry.base import LandmarkFilter, PoseEstimate, PoseEstimator
 
 
 class PnPRansacEstimator(PoseEstimator):
-    """Wraps cv2.solvePnPRansac exactly as called in VO_constrained.py L158
-    (and identically in VO_base.py L119-120)."""
+    """cv2.solvePnPRansac with the configured confidence and iteration count
+    (default reprojection threshold, no distortion), validated per BUG-002."""
 
     def __init__(self, cfg: PnPConfig) -> None:
         self.cfg = cfg
 
     def estimate(self, points_3d: np.ndarray, points_2d: np.ndarray, K: np.ndarray) -> PoseEstimate:
-        # Legacy guard: VO_constrained.py L136 / VO_base.py L106.
+        # PnP needs at least 4 correspondences.
         if points_3d.shape[0] < 4:
             return PoseEstimate(R=None, t=None, inliers=None, success=False)
 
@@ -65,7 +55,8 @@ class PnPRansacEstimator(PoseEstimator):
 
 
 class DepthUncertaintyFilter(LandmarkFilter):
-    """Ports VO_constrained.py L123-128 exactly."""
+    """Keeps points with z > min_depth_multiplier * baseline and sigma_z / z below
+    relative_depth_uncertainty_threshold."""
 
     def __init__(self, cfg: LandmarkFilterConfig) -> None:
         self.cfg = cfg

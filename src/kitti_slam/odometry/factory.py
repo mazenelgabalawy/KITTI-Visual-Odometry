@@ -1,8 +1,7 @@
 """Builds a StereoVOPipeline from a PipelineConfig.
 
-Maps config -> concrete components exactly as VO_base.py / VO_constrained.py
-wire them up (see module docstrings on pipeline.py, motion_filters.py,
-pose_estimation.py, and matchers.py for the specific transcription notes).
+Maps config sections to concrete components; see pipeline.py for the loop
+they plug into.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ def build_pipeline(cfg: PipelineConfig) -> StereoVOPipeline:
     if cfg.stereo_matcher.kind == "rectified":
         stereo_matcher = RectifiedStereoMatcher(cfg.stereo_matcher)
     else:
-        # Raw bf.match, no ratio test (VO_base.py). StereoMatcherConfig(kind=
+        # Raw bf.match, no ratio test. StereoMatcherConfig(kind=
         # "bruteforce") carries no norm of its own, so the temporal matcher's norm
         # is reused; cross_check is the stereo matcher's own setting (BUG-004).
         stereo_matcher = BruteForceMatcher(

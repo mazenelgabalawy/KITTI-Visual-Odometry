@@ -1,7 +1,6 @@
 """Abstract interfaces for pose estimation and landmark/motion filtering.
 
-These interfaces decouple the numerics ported from VO_constrained.py /
-VO_base.py (Module 4) from the pipeline wiring (Module 5).
+These interfaces decouple the estimation components from the pipeline wiring.
 """
 
 from __future__ import annotations

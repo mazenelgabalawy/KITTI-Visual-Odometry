@@ -1,7 +1,5 @@
-"""ORB detector, ported from legacy filter.process_image.
-
-Legacy process_image created a new cv2.ORB per call; here the detector is held as
-instance state (created once in __init__) but the detect+cluster sequence is identical.
+"""ORB detector, optionally followed by grid selection. The cv2.ORB object is
+created once and reused; detection is deterministic for a given image and config.
 """
 
 from __future__ import annotations

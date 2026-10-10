@@ -1,4 +1,4 @@
-"""Stereo triangulation and depth-uncertainty helpers ported from VO_constrained.py."""
+"""Stereo triangulation, landmark validity, and stereo depth uncertainty."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def triangulate_stereo_homogeneous(calib: StereoCalibration, pts_left: np.ndarra
 
 
 def triangulate_stereo(calib: StereoCalibration, pts_left: np.ndarray, pts_right: np.ndarray) -> np.ndarray:
-    """(N, 3) Euclidean points (VO_constrained.py L120-121). No validity check."""
+    """(N, 3) Euclidean points. No validity check."""
     points_h = triangulate_stereo_homogeneous(calib, pts_left, pts_right)
     return points_h[:, :3] / points_h[:, 3:4]
 
@@ -44,5 +44,5 @@ def valid_landmarks(calib: StereoCalibration, points_h: np.ndarray, min_abs_w: f
 
 
 def stereo_depth_sigma(calib: StereoCalibration, depths: np.ndarray) -> np.ndarray:
-    """Replicates VO_constrained.py L124-126: sigma_z = depths**2 / (focal * baseline)."""
+    """Depth standard deviation for 1 px of disparity error: depths**2 / (focal * baseline)."""
     return np.square(depths) / (calib.focal_length * calib.baseline)

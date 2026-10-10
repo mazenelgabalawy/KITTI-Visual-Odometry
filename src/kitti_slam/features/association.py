@@ -1,8 +1,6 @@
-"""Temporal/stereo match intersection, ported from legacy filter.filter_temporal_and_stereo_features.
-
-Only intentional behavior change vs. legacy: instead of raising ValueError when no
-matches survive filtering, this returns a StereoTemporalCorrespondences of empty
-(0, 2) float32 arrays.
+"""Temporal/stereo match intersection: the previous left keypoints that have both a
+temporal match (into the current left image) and a stereo match (into the previous
+right image). When none survive, the result holds empty (0, 2) float32 arrays.
 """
 
 from __future__ import annotations

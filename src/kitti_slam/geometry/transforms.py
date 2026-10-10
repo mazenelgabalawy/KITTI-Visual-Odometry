@@ -1,4 +1,4 @@
-"""Pose / rotation transform helpers ported from utils.py and VO_base.py."""
+"""Pose and rotation transform helpers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import numpy as np
 
 
 def rotation_to_euler(R: np.ndarray) -> np.ndarray:
-    """Verbatim port of utils.rotationMatrixToEulerAngles (same gimbal-lock branch)."""
+    """(x, y, z) Euler angles of R = Rz @ Ry @ Rx, with the usual gimbal-lock branch."""
     sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
     singular = sy < 1e-6
 
@@ -23,7 +23,7 @@ def rotation_to_euler(R: np.ndarray) -> np.ndarray:
 
 
 def invert_pose(R: np.ndarray, t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Mirrors VO_base.py L126-127: R_cam = R.T, t_cam = -R.T @ t."""
+    """Inverse of the rigid transform (R, t): (R.T, -R.T @ t)."""
     R_inv = R.T
     t_inv = -R_inv @ t
     return R_inv, t_inv
@@ -37,7 +37,7 @@ def to_homogeneous(T34: np.ndarray) -> np.ndarray:
 
 
 def compose_se3(C: np.ndarray, T: np.ndarray) -> np.ndarray:
-    """C @ homogeneous(T). Mirrors VO_base.py L132: C_k @ vstack((T, [0,0,0,1]))."""
+    """C @ homogeneous(T): compose a 4x4 pose with a 3x4 or 4x4 relative transform."""
     T = np.asarray(T)
     if T.shape == (4, 4):
         T4 = T
