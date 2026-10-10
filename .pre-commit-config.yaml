@@ -1,10 +1,6 @@
 exclude: >
   (?x)^(
-    output_base/|
-    output_constrained/|
     reference/|
-    output_features/|
-    keypoints/|
     docs/|
     .*\.pdf|
     .*\.zip|

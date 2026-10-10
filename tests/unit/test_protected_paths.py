@@ -1,4 +1,4 @@
-"""Output protection: writes into the historical baselines or reference/ are refused."""
+"""Output protection: writes into reference/ are refused."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from kitti_slam.protected_paths import ProtectedPathError, check_writable
 
 @pytest.mark.parametrize(
     "path",
-    ["output_base", "output_constrained/04", "reference", "reference/snapshot/base/04/poses.txt"],
+    ["reference", "reference/04", "reference/snapshot/base/04/poses.txt"],
 )
 def test_protected_trees_are_refused(tmp_path, path):
     with pytest.raises(ProtectedPathError):
@@ -19,7 +19,7 @@ def test_protected_trees_are_refused(tmp_path, path):
 
 
 def test_prefix_sibling_is_allowed(tmp_path):
-    assert check_writable("output_base_experiment/04", tmp_path) == (tmp_path / "output_base_experiment/04").resolve()
+    assert check_writable("reference_experiment/04", tmp_path) == (tmp_path / "reference_experiment/04").resolve()
     assert check_writable("references", tmp_path) == (tmp_path / "references").resolve()
 
 
@@ -31,9 +31,9 @@ def test_nested_directory_symlink_into_reference_is_refused(tmp_path):
         check_writable("results/run/04/poses.txt", tmp_path)
 
 
-def test_final_file_symlink_into_baseline_is_refused(tmp_path):
-    (tmp_path / "output_base" / "04").mkdir(parents=True)
-    target = tmp_path / "output_base" / "04" / "poses.txt"
+def test_final_file_symlink_into_reference_is_refused(tmp_path):
+    (tmp_path / "reference" / "base" / "04").mkdir(parents=True)
+    target = tmp_path / "reference" / "base" / "04" / "poses.txt"
     target.write_text("frozen\n")
     out = tmp_path / "results" / "04"
     out.mkdir(parents=True)

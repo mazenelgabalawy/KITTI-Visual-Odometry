@@ -1,8 +1,7 @@
-"""Write protection for historical baselines and frozen reference snapshots.
+"""Write protection for frozen reference snapshots.
 
-`output_base/` and `output_constrained/` hold the historical results of the original scripts;
 `reference/` holds local reference snapshots. Runners and evaluators must
-never write into any of them.
+never write into it.
 
 Checks operate on fully resolved paths, so a symlink anywhere along the output
 path -- including a final `poses.txt` that is itself a link -- cannot redirect
@@ -13,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PROTECTED_DIRS: tuple[str, ...] = ("output_base", "output_constrained", "reference")
+PROTECTED_DIRS: tuple[str, ...] = ("reference",)
 
 
 class ProtectedPathError(ValueError):
@@ -43,7 +42,6 @@ def check_writable(path: str | Path, repo_root: str | Path) -> Path:
         if resolved == protected or protected in resolved.parents:
             raise ProtectedPathError(
                 f"Refusing to write to {resolved} (matches or is inside protected directory {protected}). "
-                "output_base/ and output_constrained/ are historical baselines and reference/ holds frozen "
-                "reference snapshots; choose a different output location."
+                "reference/ holds frozen reference snapshots; choose a different output location."
             )
     return resolved

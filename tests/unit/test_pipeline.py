@@ -346,21 +346,18 @@ def _load_run_vo_module(repo_root):
     return module
 
 
-def test_run_vo_refuses_baseline_dirs(repo_root):
+def test_run_vo_refuses_reference_dirs(repo_root):
     run_vo = _load_run_vo_module(repo_root)
 
     with pytest.raises(SystemExit):
-        run_vo.guard_output_dir("output_base", repo_root)
+        run_vo.guard_output_dir("reference", repo_root)
 
     with pytest.raises(SystemExit):
-        run_vo.guard_output_dir("output_constrained", repo_root)
-
-    with pytest.raises(SystemExit):
-        run_vo.guard_output_dir("output_base/04", repo_root)
+        run_vo.guard_output_dir("reference/base/04", repo_root)
 
     # A sibling directory that merely shares a prefix must NOT be refused.
-    resolved = run_vo.guard_output_dir("output_base_experiment", repo_root)
-    assert resolved == (repo_root / "output_base_experiment").resolve()
+    resolved = run_vo.guard_output_dir("reference_experiment", repo_root)
+    assert resolved == (repo_root / "reference_experiment").resolve()
 
 
 # ---------------------------------------------------------------------------

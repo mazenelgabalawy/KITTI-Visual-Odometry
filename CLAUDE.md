@@ -60,11 +60,11 @@ Never commit dataset files, archives, or large binaries.
 | `scripts/run_vo.py`, `scripts/evaluate.py`, `scripts/visualize_features.py` | run VO; evaluate trajectories; draw one frame's keypoints and matches |
 | `configs/*.yaml` | the only configs (all tunable parameters) |
 | `tests/unit/` (CI), `tests/regression/` (needs data) | `tests/unit/data/goldens.npz` freezes package outputs (`generate_goldens.py`) |
-| `output_base/`, `output_constrained/` | historical results. **Read-only.** `output_base/01/poses.txt` is truncated (see errata) |
-| `output_features/`, `keypoints/`, root `*.png`, `*.pdf` | historical figures and reports, not code |
-| `docs/` | `capabilities.md` (capabilities, configuration reference, corrections), `evaluation.md`, `errata/` |
+| `docs/` | `capabilities.md` (capabilities, configuration reference, corrections), `evaluation.md` |
 
-The original seminar scripts are in Git history at revision `461c8fe`.
+The original seminar code, its results, figures, report, and the report's errata
+are on the `legacy` branch, with the Phase B corrections applied in the original
+file structure. Nothing from it belongs on `main`.
 
 ## Running & Evaluating
 
@@ -99,16 +99,21 @@ The original seminar scripts are in Git history at revision `461c8fe`.
   shared geometry in `src/kitti_slam/geometry/`.
 - **Parity and goldens:** controlled numerical parity means byte-identical
   complete pose files in the same recorded environment. Translation-only or
-  tolerance checks are diagnostics only. Never refresh a golden or historical
-  output to make a test pass; regenerate `goldens.npz` only together with an
-  intended, explained behavior change.
+  tolerance checks are diagnostics only. Never refresh a golden to make a test
+  pass; regenerate `goldens.npz` only together with an intended, explained
+  behavior change.
 - **Outputs:** each experiment gets its own `results/...` directory, which is gitignored.
-  Writes into `output_*` or `reference/` are refused by `kitti_slam.protected_paths`.
+  Writes into `reference/` are refused by `kitti_slam.protected_paths`.
 - **Style:** plain procedural Python with NumPy/OpenCV, formatted and linted with
   Ruff. New code goes in the package or in `scripts/`, never at the repo root.
   Scripts use `if __name__ == "__main__":` and argparse.
 - **Git:** do not commit datasets, venvs, caches, `results/`, or anything listed
   in `.git/info/exclude`.
+- **Branches:** `main` holds the accepted package. From Phase C on, every change
+  set is developed and pushed on its own branch, named after the change it makes
+  (for example `phase-c/far-point-weighting`), and merged into `main` only when
+  the owner decides. Never push such work directly to `main`. `legacy` holds the
+  corrected seminar code and is never merged into `main`.
 
 ## Development
 
@@ -118,17 +123,18 @@ The original seminar scripts are in Git history at revision `461c8fe`.
   pass/fail/skip counts.
 - Lint/format: `ruff check .` and `ruff format --check .` (config in
   `pyproject.toml`). All committed code is in scope. Only the
-  result/reference/historical trees, `docs/`, and the venv are excluded.
+  result and reference trees, `docs/`, and the venv are excluded.
 - Pre-commit: `pre-commit install`. It runs Ruff and hygiene hooks and excludes the
-  historical and reference trees.
+  reference tree.
 - CI (`.github/workflows/ci.yml`): installs `.[dev,eval]`, runs `pip check`, Ruff,
   and the unit tier. A separate job builds the wheel and imports the core modules
   from a clean venv outside the checkout.
 
 ## Future-Work Notes
 
-- BA starts from scratch in Phase E. The old skeleton was non-functional and was
-  removed. It is in Git at `461c8fe` if needed for reference.
+- BA starts from scratch in Phase E. The seminar's BA skeleton was non-functional
+  and was removed; it survives only in the history of the `legacy` branch
+  (`b8796f7`).
 - GTSAM idioms: `NonlinearFactorGraph`, `Values`, `noiseModel`,
   `GenericProjectionFactorCal3_S2` for BA, `BetweenFactorPose3` for pose graphs,
   and `ISAM2` for incremental SLAM. Keep `gtsam` imports lazy and out of core VO.

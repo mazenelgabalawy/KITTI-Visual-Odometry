@@ -111,5 +111,5 @@ def test_evaluate_fails_on_length_mismatch_and_reports_it(repo_root, tmp_path, c
 
 def test_evaluate_refuses_protected_results_dir(repo_root, capsys):
     evaluate = _load_script(repo_root, "evaluate")
-    assert evaluate.main(["--results-dir", "output_constrained"]) == 1
+    assert evaluate.main(["--results-dir", "reference"]) == 1
     assert "Refusing to write" in capsys.readouterr().err

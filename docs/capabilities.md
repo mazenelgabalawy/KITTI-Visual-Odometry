@@ -3,10 +3,10 @@
 Status as of 2026-10-10. **Implemented** means code exists. **Validated** means a
 recorded check passed.
 
-The package began as a port of the original seminar scripts and reproduced their
-trajectories byte for byte on all 11 labeled sequences in both configurations,
-until the corrections in §4. The original scripts are in Git history at revision
-`461c8fe`.
+The package began as a port of the seminar scripts and reproduced their
+trajectories byte for byte on all 11 labeled sequences in both configurations.
+The corrections in §4 were applied to both; the seminar scripts, corrected, are on
+the `legacy` branch and still produce byte-identical trajectories.
 
 ## 1. Capability status
 
@@ -60,9 +60,8 @@ motion: constant velocity, in every configuration.
   plus finite values and valid rotations.
 - **Run outputs:** `run_vo.py` writes `<output>/<XX>/poses.txt` after the sequence
   completes, and `diagnostics.csv` next to it with `--diagnostics`. Each sequence
-  runs independently. Paths that resolve into `output_base/`, `output_constrained/`,
-  or `reference/` are refused, including through symlinks at any level
-  (`kitti_slam.protected_paths`).
+  runs independently. Paths that resolve into `reference/` are refused,
+  including through symlinks at any level (`kitti_slam.protected_paths`).
 - **Metrics:** `evaluate.py` writes `<XX>/metrics/<profile>.{json,txt}` and,
   with `--plots`, `<XX>/plots/*.png`. Definitions: [evaluation.md](evaluation.md).
 

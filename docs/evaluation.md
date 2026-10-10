@@ -34,9 +34,9 @@ its 100 m reference-selected pairs. A frame interval can still be passed to
 
 Notes:
 
-- **Historical numbers.** The seminar report's RPE values use a 100-frame
-  interval, not 100 m (see the [errata](errata/vo-seminar-errata.md)); they are
-  not comparable with `metric_distance`.
+- **Seminar numbers.** The seminar report's RPE values use a 100-frame
+  interval, not 100 m (see its errata on the `legacy` branch); they are not
+  comparable with `metric_distance`.
 - **Reference-selected pairs.** Choosing 100 m pairs on the *estimate's* path
   (evo's `pairs_from_reference=False`) would score two estimates on different
   pairs, and an estimate with a wrong scale on a different stretch of road.
@@ -79,4 +79,4 @@ The ground-truth directory defaults to the first existing one of `./poses` and
 `XX/metrics/<profile>.json`, which holds the complete settings, counts, coverage, statistics,
 and input sha256 values, and `XX/metrics/<profile>.txt`. With `--plots` it also writes
 `XX/plots/`. The exit status is non-zero if any requested sequence cannot be evaluated.
-Writing into `output_base/`, `output_constrained/`, or `reference/` is refused.
+Writing into `reference/` is refused.

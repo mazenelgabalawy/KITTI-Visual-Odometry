@@ -24,7 +24,7 @@ src/kitti_slam/
 scripts/        run_vo, evaluate, visualize_features
 configs/        base.yaml, constrained.yaml
 tests/          unit/ (CI) and regression/ (needs KITTI data)
-docs/           capabilities and configuration, evaluation definitions, errata
+docs/           capabilities and configuration, evaluation definitions
 ```
 
 ## Setup
@@ -76,7 +76,7 @@ Add `--timing` for a per-stage timing table. Add `--diagnostics` to also write
 `<output>/XX/diagnostics.csv`: one row per frame with the registration outcome
 (registered, or why it failed) and the match, point, and PnP inlier counts behind
 it. Diagnostics do not change the poses. Outputs that resolve into
-`output_base/`, `output_constrained/`, or `reference/` are refused.
+`reference/` are refused.
 
 ## Evaluate
 
@@ -130,12 +130,11 @@ Known limitations, not fixed because they do not affect KITTI estimates:
 - `pnp.seed` has no effect.
 - `motion.max_pitch_deg` gates rotation about camera *y*. That is the heading axis, not pitch.
 
-## Historical material
+## Seminar code
 
-- `output_base/` and `output_constrained/` hold the original results. They are
-  write-protected, and `output_base/01/poses.txt` is truncated.
-- `output_features/`, `keypoints/`, and the root `*.png` files are figures from the original scripts.
-- `VO_Seminar.pdf` is the original report. Its corrections, including that its
-  "100 m" RPE is a 100-frame RPE, are in
-  [docs/errata/vo-seminar-errata.md](docs/errata/vo-seminar-errata.md).
-- The original scripts are in Git history at revision `461c8fe`.
+The package began as the seminar code `VO_base.py` / `VO_constrained.py`. That
+code, its results, figures, and report (`VO_Seminar.pdf`, with an errata) are on
+the [`legacy`](https://github.com/mazenelgabalawy/KITTI-Visual-Odometry/tree/legacy) branch, with the same corrections as the
+package applied. With the same parameters, the `legacy` scripts and this package
+produce byte-identical trajectories on all 11 labeled sequences in both
+configurations.

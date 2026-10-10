@@ -29,9 +29,8 @@ from kitti_slam.protected_paths import ProtectedPathError, check_writable  # noq
 
 def guard_output_dir(output_dir: str | Path, repo_root: str | Path | None = None) -> Path:
     """Refuses (via SystemExit) if output_dir resolves to, or inside, a protected
-    tree (historical output_base/ / output_constrained/ baselines or frozen
-    reference/ snapshots). Returns the resolved path otherwise. The same check
-    applies to individual output files, so symlinks cannot bypass it."""
+    tree (frozen reference/ snapshots). Returns the resolved path otherwise. The
+    same check applies to individual output files, so symlinks cannot bypass it."""
     root = Path(repo_root) if repo_root is not None else _REPO_ROOT
     try:
         return check_writable(output_dir, root)
