@@ -76,6 +76,9 @@ numbers. Those lines refer to `git show 461c8fe:<file>`.
 
 - During iteration use sequence 04 (short) and 01 (hard highway case). Run the
   full 11×2 sweep only at milestone boundaries.
+- `run_vo.py --diagnostics` writes a per-frame `diagnostics.csv` (registration
+  outcome and match/point/inlier counts) without changing the poses. Use it to
+  explain every trajectory change.
 - `evaluate.py` defaults to the `metric_distance` (100 m RPE) and
   `kitti_segments` profiles. Use `--profiles legacy_frames` only to reproduce
   historical 100-frame numbers.
