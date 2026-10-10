@@ -56,4 +56,5 @@ def build_pipeline(cfg: PipelineConfig) -> StereoVOPipeline:
         landmark_filter=landmark_filter,
         pose_estimator=pose_estimator,
         motion_filter=motion_filter,
+        min_abs_w=cfg.triangulation.min_abs_w,
     )

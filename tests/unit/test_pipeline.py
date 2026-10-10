@@ -5,6 +5,7 @@ All tests here are synthetic and always run (no KITTI dataset needed).
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import sys
 
@@ -13,7 +14,6 @@ import numpy as np
 import pytest
 
 from kitti_slam.config import ConfigError, load_config
-from kitti_slam.config.schema import PnPConfig
 from kitti_slam.datasets.base import StereoFrame, StereoSequence
 from kitti_slam.features.base import FeatureDetector, Features, Matcher
 from kitti_slam.features.grid_filter import GridKeypointFilter
@@ -120,16 +120,7 @@ def _make_synthetic_sequence(n_frames: int = 5, step_px: int = 6, depth: float =
 def test_pipeline_runs_synthetic_sequence(repo_root):
     cfg = load_config(repo_root / "configs" / "base.yaml")
     # Keep PnP RANSAC deterministic and iteration count modest for test speed.
-    cfg = cfg.__class__(
-        run=cfg.run,
-        detector=cfg.detector,
-        temporal_matcher=cfg.temporal_matcher,
-        stereo_matcher=cfg.stereo_matcher,
-        pnp=PnPConfig(confidence=0.999, iterations_count=500, seed=42),
-        motion=cfg.motion,
-        grid_filter=cfg.grid_filter,
-        landmark_filter=cfg.landmark_filter,
-    )
+    cfg = dataclasses.replace(cfg, pnp=dataclasses.replace(cfg.pnp, confidence=0.999, iterations_count=500))
     pipeline = build_pipeline(cfg)
 
     sequence, expected_t = _make_synthetic_sequence(n_frames=5, step_px=6, depth=20.0)
@@ -404,7 +395,7 @@ def test_diagnostics_record_failures_and_streaks(tmp_path):
     diagnostics.write_csv(path)
     lines = path.read_text().splitlines()
     assert lines[0].startswith("frame,outcome,temporal_matches")
-    assert lines[1] == "1,no_correspondences,0,0,0,,,,,,1"
+    assert lines[1] == "1,no_correspondences,0,0,0,,,,,,,1"
 
 
 def test_diagnostics_reject_unknown_outcome():
@@ -412,3 +403,42 @@ def test_diagnostics_reject_unknown_outcome():
 
     with pytest.raises(ValueError):
         FrameDiagnostics().append({"frame": 1, "outcome": "skipped"})
+
+
+class _MixedDepthDetector(_StereoPairDetector):
+    """Keypoints 0-3 at +10 px disparity (in front), 4-7 at -10 px (behind)."""
+
+    def detect(self, image: np.ndarray) -> Features:
+        right = self.calls % 2
+        self.calls += 1
+        kps = [
+            cv2.KeyPoint(x=100.0 + 20.0 * i - (10.0 if i < 4 else -10.0) * right, y=60.0 + 15.0 * i, size=5.0)
+            for i in range(_N_SCRIPTED)
+        ]
+        return Features(kps, np.arange(_N_SCRIPTED * 32, dtype=np.uint8).reshape(_N_SCRIPTED, 32))
+
+
+def test_points_behind_the_cameras_do_not_reach_pnp():
+    from kitti_slam.odometry.diagnostics import FrameDiagnostics
+
+    seen = []
+
+    class _Recorder(_ScriptedEstimator):
+        def estimate(self, points_3d, points_2d, K):
+            seen.append(points_3d.copy())
+            return super().estimate(points_3d, points_2d, K)
+
+    pipeline = StereoVOPipeline(
+        detector=_MixedDepthDetector(),
+        temporal_matcher=_IdentityMatcher(),
+        stereo_matcher=_IdentityMatcher(),
+        landmark_filter=None,
+        pose_estimator=_Recorder([_FORWARD]),
+        motion_filter=NullMotionFilter(),
+        min_abs_w=1e-4,
+    )
+    diagnostics = FrameDiagnostics()
+    pipeline.run(_make_trivial_sequence(n_frames=2), progress=False, diagnostics=diagnostics)
+    (row,) = diagnostics.rows
+    assert (row["associated"], row["nonpositive_depth_points"], row["invalid_points"], row["landmarks"]) == (8, 4, 4, 4)
+    assert len(seen) == 1 and seen[0].shape == (4, 3) and (seen[0][:, 2] > 0).all()

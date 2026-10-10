@@ -29,6 +29,12 @@ landmark_filter:
   min_depth_multiplier: 3
   relative_depth_uncertainty_threshold: 0.5
 
+triangulation:
+  # Keep a triangulated point only if it is finite, in front of both cameras, and
+  # |w| >= min_abs_w (unit-norm homogeneous point, |w| ~ 1/range in 1/m): 1.0e-4
+  # rejects points beyond ~1/min_abs_w m. A numerical guard, not a depth filter.
+  min_abs_w: 1.0e-4
+
 pnp:
   confidence: 0.99
   iterations_count: 2000

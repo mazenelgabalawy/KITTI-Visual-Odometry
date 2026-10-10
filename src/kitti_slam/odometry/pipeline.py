@@ -62,7 +62,7 @@ from kitti_slam.evaluation.trajectory_io import TrajectoryWriter
 from kitti_slam.features.association import intersect_temporal_stereo
 from kitti_slam.features.base import FeatureDetector, Features, Matcher
 from kitti_slam.geometry.transforms import compose_se3, invert_pose
-from kitti_slam.geometry.triangulation import triangulate_stereo
+from kitti_slam.geometry.triangulation import triangulate_stereo_homogeneous, valid_landmarks
 from kitti_slam.odometry.base import LandmarkFilter, MotionFilter, PoseEstimator
 from kitti_slam.odometry.diagnostics import REGISTERED, FrameDiagnostics
 from kitti_slam.odometry.timing import NullStageTimer, StageTimer
@@ -90,6 +90,7 @@ class StereoVOPipeline:
         pose_estimator: PoseEstimator,
         motion_filter: MotionFilter,
         min_points: int = 4,
+        min_abs_w: float = 0.0,
     ) -> None:
         self.detector = detector
         self.temporal_matcher = temporal_matcher
@@ -98,6 +99,7 @@ class StereoVOPipeline:
         self.pose_estimator = pose_estimator
         self.motion_filter = motion_filter
         self.min_points = min_points
+        self.min_abs_w = min_abs_w
 
     def _propagate(
         self,
@@ -172,13 +174,18 @@ class StereoVOPipeline:
             )
 
         with timer.stage("triangulate"):
-            points_3d = triangulate_stereo(calib, corr.left_prev, corr.right_prev)
-        left_curr_pts = corr.left_curr
+            points_h = triangulate_stereo_homogeneous(calib, corr.left_prev, corr.right_prev)
+            # BUG-003: only finite points in front of both cameras reach PnP.
+            valid, points_3d = valid_landmarks(calib, points_h, self.min_abs_w)
 
         if diag is not None:
             finite = np.isfinite(points_3d).all(axis=1)
             diag["nonfinite_points"] = int(np.count_nonzero(~finite))
             diag["nonpositive_depth_points"] = int(np.count_nonzero(finite & (points_3d[:, 2] <= 0)))
+            diag["invalid_points"] = int(np.count_nonzero(~valid))
+
+        points_3d = points_3d[valid]
+        left_curr_pts = corr.left_curr[valid]
 
         if self.landmark_filter is not None:
             mask = self.landmark_filter.valid_mask(points_3d, calib)

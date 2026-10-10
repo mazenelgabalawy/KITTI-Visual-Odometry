@@ -35,6 +35,7 @@ a separate key.
 | `temporal_cross_check`, `temporal_inlier_threshold` | `temporal_matcher.cross_check`, `temporal_matcher.ratio_threshold` | `ratio_threshold` is the **fraction of matches kept** after sorting by distance (0.5 keeps the best half). It is not a Lowe ratio test. |
 | `stereo_cross_check`, `stereo_pixel_threshold`, `stereo_max_hamming_distance`, `stereo_ratio_test`, `stereo_max_disparity` | `stereo_matcher.{cross_check, pixel_threshold, max_hamming_distance, ratio_test, max_disparity}` with `kind: rectified` | Rectified matcher: y-band (px), Hamming cap, Lowe ratio, and disparity cap (px). `kind: bruteforce` is the base matcher. |
 | `min_depth_multiplier`, `relative_depth_uncertainty_threshold` | `landmark_filter.*` | Minimum depth = multiplier × baseline (m). The uncertainty rule `σ_z/z < τ` is equivalent to disparity > 1/τ px. |
+| — | `triangulation.min_abs_w` | Landmark validity (BUG-003, §4b): a triangulated point reaches PnP only if it is finite, in front of both cameras, and its unit-norm homogeneous `\|w\|` ≥ `min_abs_w`. `\|w\|` ≈ 1/range (1/m), so `1.0e-4` rejects points beyond about 10 km. |
 | `pnp_confidence`, `pnp_iterations_count` | `pnp.confidence`, `pnp.iterations_count` | `cv2.solvePnPRansac` arguments. The reprojection threshold is OpenCV's default of 8 px. |
 | — | `pnp.seed` | Sets `cv2.setRNGSeed`. It has **no effect** on the current solver path, whose RANSAC uses a fixed internal RNG (BUG-014). |
 | `max_translation` | `motion.max_translation` | Rejects a frame whose relative translation exceeds this value (m). |
@@ -79,6 +80,7 @@ profiles in SI units.
 | ID | Legacy and port behavior | Corrected behavior | Measured effect on KITTI |
 |---|---|---|---|
 | BUG-013 | A failed registration held the pose in base (zero velocity) and repeated the last relative motion in constrained (`interpolate_on_skip`) | Every failed registration (no correspondences, too few points, failed or rejected PnP, implausible motion) propagates the last accepted relative transform: constant velocity, in both configurations. Propagation does not change the transform, and the next registration starts from the current frame | None on the shipped configs: no registration failed on any sequence before this change, so all 22 trajectories are byte-identical |
+| BUG-003 | Every triangulated point reached PnP, including points behind the cameras and points with near-zero homogeneous `w` (zero disparity, z up to 1e25 m) | One validity check in both configurations: finite coordinates, positive depth in both cameras, `\|w\|` ≥ `triangulation.min_abs_w` | Base only: it rejects 2.8% (seq 04) to 20.1% (seq 01) of associated points; on seq 01, 11.3% are behind the cameras and 8.7% lie beyond 10 km. Constrained is unchanged: its matcher bounds disparity to [1, 64] px |
 
 ## 5. Legacy retirement (plan task B7, executed 2026-10-08)
 

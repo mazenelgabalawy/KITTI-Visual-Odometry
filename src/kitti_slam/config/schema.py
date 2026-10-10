@@ -38,6 +38,15 @@ class StereoMatcherConfig:
 
 
 @dataclass(frozen=True)
+class TriangulationConfig:
+    # Landmark validity (BUG-003): a triangulated point is kept only if it is finite,
+    # has positive depth in both cameras, and its unit-norm homogeneous coordinate
+    # satisfies |w| >= min_abs_w. |w| is about 1/range (1/m), so this is a numerical
+    # guard against points at infinity, not a depth filter.
+    min_abs_w: float
+
+
+@dataclass(frozen=True)
 class LandmarkFilterConfig:
     min_depth_multiplier: float
     relative_depth_uncertainty_threshold: float
@@ -70,6 +79,7 @@ class PipelineConfig:
     detector: DetectorConfig
     temporal_matcher: TemporalMatcherConfig
     stereo_matcher: StereoMatcherConfig
+    triangulation: TriangulationConfig
     pnp: PnPConfig
     motion: MotionConfig
     grid_filter: GridFilterConfig | None = None

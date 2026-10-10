@@ -9,6 +9,7 @@ from .schema import (
     RunConfig,
     StereoMatcherConfig,
     TemporalMatcherConfig,
+    TriangulationConfig,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "RunConfig",
     "StereoMatcherConfig",
     "TemporalMatcherConfig",
+    "TriangulationConfig",
 ]

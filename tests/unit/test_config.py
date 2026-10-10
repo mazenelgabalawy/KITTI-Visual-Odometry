@@ -71,6 +71,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100
@@ -98,6 +100,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100
@@ -126,6 +130,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100
@@ -163,6 +169,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100
@@ -191,6 +199,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 1
   iterations_count: 100
@@ -222,6 +232,8 @@ temporal_matcher:
 stereo_matcher:
   kind: bruteforce
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100
@@ -257,6 +269,8 @@ temporal_matcher:
 stereo_matcher:
   kind: not_a_real_kind
   cross_check: true
+triangulation:
+  min_abs_w: 1.0e-4
 pnp:
   confidence: 0.99
   iterations_count: 100

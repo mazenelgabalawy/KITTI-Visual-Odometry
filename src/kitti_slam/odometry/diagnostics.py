@@ -13,6 +13,7 @@ Columns:
   associated                correspondences present in both match sets
   nonfinite_points          triangulated points with a nonfinite coordinate
   nonpositive_depth_points  finite triangulated points with z <= 0
+  invalid_points            points rejected by the landmark validity check (BUG-003)
   landmarks                 points passed to PnP (after any filtering)
   pnp_retval                cv2.solvePnPRansac return value (1/0); empty if PnP did not run
   pnp_inliers               RANSAC inlier count; empty if PnP did not run
@@ -42,6 +43,7 @@ FIELDS = (
     "associated",
     "nonfinite_points",
     "nonpositive_depth_points",
+    "invalid_points",
     "landmarks",
     "pnp_retval",
     "pnp_inliers",
