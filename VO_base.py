@@ -68,6 +68,7 @@ if __name__ == "__main__":
         
         # Initialize poses file
         C_k = np.eye(4)  # Initial pose (Identity matrix)
+        T_prev = np.eye(3,4)  # Initial transformation
         # Save initial pose of the left camera
         save_transformation_matrix(output_file, C_k)
                 
@@ -96,6 +97,16 @@ if __name__ == "__main__":
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,
                                                                                             left_feat_prev, right_feat_prev, left_feat_curr)
             
+            if left_prev_pts.shape[0] == 0:
+                print(f"Frame {k}: No matches found after filtering. Skipping frame.")
+                # No correspondences; skip this frame
+                left_prev = left_curr
+                right_prev = right_curr
+                # Constant velocity: propagate the pose with the previous transformation
+                C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
+                save_transformation_matrix(output_file, C_k)
+                continue
+            
             # Triangulate 3D points from previous left and right images
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
             points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
@@ -106,7 +117,8 @@ if __name__ == "__main__":
                 # Not enough points for PnP; skip this frame
                 left_prev = left_curr
                 right_prev = right_curr
-                # Save previous pose again (no interpolation in base)
+                # Constant velocity: propagate the pose with the previous transformation
+                C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
                 save_transformation_matrix(output_file, C_k)
                 continue
 
@@ -135,3 +147,6 @@ if __name__ == "__main__":
             # Copy previous images for next iteration
             left_prev = left_curr
             right_prev = right_curr
+            
+            # Copy transformation for constant-velocity propagation in case of skipping
+            T_prev = T

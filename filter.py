@@ -261,6 +261,7 @@ def filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev, l
     - np.array of shape (N, 2): Points from left_prev for triangulation.
     - np.array of shape (N, 2): Corresponding points from right_prev for triangulation.
     - np.array of shape (N, 2): Corresponding 2D points from left_curr for PnP.
+    N is 0 when no temporal match has a stereo match.
     """
     # Map left_prev indices to right_prev indices via stereo matches
     stereo_map = {m.queryIdx: m.trainIdx for m in stereo_matches_prev}
@@ -269,7 +270,8 @@ def filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev, l
     filtered_temporal = [m for m in temporal_matches if m.queryIdx in stereo_map]
     
     if not filtered_temporal:
-        raise ValueError("No valid matches found after filtering.")
+        empty = np.empty((0, 2), dtype=np.float32)
+        return empty, empty.copy(), empty.copy()
     
     # Extract indices as NumPy arrays
     query_indices = np.array([m.queryIdx for m in filtered_temporal])

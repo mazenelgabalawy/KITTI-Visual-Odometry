@@ -115,6 +115,23 @@ if __name__ == "__main__":
             left_prev_pts, right_prev_pts, left_curr_pts = filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev,
                                                                                             left_feat_prev, right_feat_prev, left_feat_curr)
             
+            if left_prev_pts.shape[0] == 0:
+                print(f"Frame {k}: No matches found after filtering. Skipping frame.")
+                # No correspondences; skip this frame
+                left_prev = left_curr
+                right_prev = right_curr
+                
+                left_feat_prev = left_feat_curr
+                left_desc_prev = left_desc_curr
+                
+                right_feat_prev = right_feat_curr
+                right_desc_prev = right_desc_curr
+                
+                # Constant velocity: propagate the pose with the previous transformation
+                C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
+                save_transformation_matrix(output_file, C_k)
+                continue
+            
             # Triangulate 3D points from previous left and right images
             points_3D_hom = cv2.triangulatePoints(P0, P1, left_prev_pts.T, right_prev_pts.T)
             points_3D = (points_3D_hom[:3, :] / points_3D_hom[3, :]).T  # Convert to non-homogeneous coordinates
@@ -144,10 +161,8 @@ if __name__ == "__main__":
                 right_feat_prev = right_feat_curr
                 right_desc_prev = right_desc_curr
                 
-                # Interpolate pose using previous transformation
+                # Constant velocity: propagate the pose with the previous transformation
                 C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
-                
-                # Save previous pose again
                 save_transformation_matrix(output_file, C_k)
                 continue
 
@@ -173,7 +188,7 @@ if __name__ == "__main__":
             if np.linalg.norm(t_cam) > max_translation or abs(pitch) > np.deg2rad(max_pitch_deg):
                 print(f"Frame {k}: Translation too large ({np.linalg.norm(t_cam):.2f} m) or pitch too large ({np.rad2deg(pitch):.2f} degrees). Skipping frame.")
                 
-                # Skip this frame; keep previous pose
+                # Skip this frame
                 left_prev = left_curr
                 right_prev = right_curr
                 
@@ -183,9 +198,8 @@ if __name__ == "__main__":
                 right_feat_prev = right_feat_curr
                 right_desc_prev = right_desc_curr
                 
+                # Constant velocity: propagate the pose with the previous transformation
                 C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
-                                
-                # Save previous pose again
                 save_transformation_matrix(output_file, C_k)
                 continue
 
@@ -206,5 +220,5 @@ if __name__ == "__main__":
             right_feat_prev = right_feat_curr
             right_desc_prev = right_desc_curr
             
-            # Copy pose for interpolation in case of skipping
+            # Copy transformation for constant-velocity propagation in case of skipping
             T_prev = T
