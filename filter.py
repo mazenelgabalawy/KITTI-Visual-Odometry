@@ -48,9 +48,12 @@ def cluster_keypoints(keypoints, descriptors, image, grid_size, max_per_grid=3):
     # Extract positions
     positions = np.array([kp.pt for kp in keypoints])
     
-    # Compute grid indices (row = y // cell_height, col = x // cell_width)
-    rows = np.clip(positions[:, 1] // grid_size[0], 0, (height // grid_size[0]) - 1)
-    cols = np.clip(positions[:, 0] // grid_size[1], 0, (width // grid_size[1]) - 1)
+    # Compute grid indices (row = y // cell_height, col = x // cell_width). The number of cells
+    # rounds up, so a partial row or column at the image border is a cell of its own
+    n_rows = int(np.ceil(height / grid_size[0]))
+    n_cols = int(np.ceil(width / grid_size[1]))
+    rows = np.clip(positions[:, 1] // grid_size[0], 0, n_rows - 1)
+    cols = np.clip(positions[:, 0] // grid_size[1], 0, n_cols - 1)
     
     # Group by grid cell
     grid_groups = defaultdict(list)
