@@ -1,7 +1,6 @@
 import numpy as np
 import cv2
 import bisect
-from scipy.optimize import least_squares
 from collections import defaultdict
 
 def process_image(image, nfeatures, scale, nlevels, grid_size=(30,20), max_per_grid=5):
@@ -290,142 +289,6 @@ def filter_temporal_and_stereo_features(temporal_matches, stereo_matches_prev, l
     return left_prev_pts, right_prev_pts, left_curr_pts
 
 
-def planar_2pt_pnp(points3d, points2d, camera_matrix):
-    if points3d.shape[0] != 2 or points2d.shape[0] != 2:
-        return False, None, None
-    
-    # Normalize current 2D to bearings (x2, y2 = u', v')
-    K_inv = np.linalg.inv(camera_matrix)
-    homog = np.hstack((points2d, np.ones((2,1))))
-    normalized_homog = K_inv @ homog.T
-    p2_norm = (normalized_homog[:2] / normalized_homog[2]).T  # (2,2) rows as points [u', v']
-    
-    # Normalize prev 3D to bearings (x1, y1 = X/Z, Y/Z)
-    depths = points3d[:, 2]
-    if np.any(depths <= 0):
-        return False, None, None
-    p1_norm = (points3d[:, :2] / depths[:, np.newaxis]).T  # (2,2) rows as points [u, v]
-    
-    # Non-linear residuals from slide (for i=0,1: -x1 sin θ1 + x2 sin θ2 + y1 cos θ1 - y2 cos θ2 = 0)
-    def residuals(params):
-        theta1, theta2 = params
-        res = np.zeros(2)
-        for i in range(2):
-            x1, y1 = p1_norm[0, i], p1_norm[1, i]
-            x2, y2 = p2_norm[0, i], p2_norm[1, i]
-            res[i] = -x1 * np.sin(theta1) + x2 * np.sin(theta2) + y1 * np.cos(theta1) - y2 * np.cos(theta2)
-        return res
-    
-    # Optimize with least_squares (Gauss-Newton variant)
-    initials = [[0, 0], [np.pi/2, np.pi/2], [np.pi, np.pi], [3*np.pi/2, 3*np.pi/2]]  # For 4 ambiguities
-    valid_solutions = []
-    
-    for init in initials:
-        result = least_squares(residuals, init, method='lm', ftol=1e-8, xtol=1e-8)
-        if result.success and result.cost < 1e-6:
-            theta1, theta2 = result.x
-            theta = theta2 - theta1
-            s, c = np.sin(theta), np.cos(theta)
-            R = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-            
-            # Recover absolute t (stereo: avg over points from λ [u', v', 1] = R X + t)
-            t_candidates = []
-            for i in range(2):
-                q_hom = np.append(p2_norm[:, i], 1)
-                rx = R @ points3d[i]
-                v_norm = q_hom[1]  # Normalized v'
-                Y = points3d[i, 1]
-                if abs(v_norm) < 1e-6:
-                    break
-                lambda_i = Y / v_norm
-                if lambda_i <= 0:
-                    break
-                t_i = lambda_i * q_hom - rx
-                t_candidates.append(t_i[[0,2]])  # tx, tz
-            
-            if len(t_candidates) != 2:
-                continue
-            
-            t_mean = np.mean(t_candidates, axis=0)
-            if np.var(t_candidates, axis=0).max() > 1e-3:
-                continue
-            
-            t = np.array([t_mean[0], 0, t_mean[1]]).reshape(3,1)
-            
-            # Validate positive depths
-            transformed = R @ points3d.T + t
-            if np.all(transformed[2] > 0):
-                valid_solutions.append((R, t))
-    
-    if not valid_solutions:
-        return False, None, None
-    
-    # Take best (lowest cost, or first)
-    R, t = valid_solutions[0]
-    return True, R, t
-    
-
-def RANSAC_pnp_two_point(triangulated_points, image_points, camera_matrix, outlier_ratio=0.5, confidence=0.99, rep_error_threshold=2.0):
-    iterations = int(np.ceil(np.log(1 - confidence) / np.log(1 - (1 - outlier_ratio)**2)))
-    iterations = min(iterations, 1000)
-    
-    N = triangulated_points.shape[0]
-    best_inliers = []
-    best_rvec = None
-    best_tvec = None
-    current_outlier = outlier_ratio
-    
-    for i in range(iterations):
-        sample_indices = np.random.choice(N, 2, replace=False)
-        sample_3D = triangulated_points[sample_indices]
-        sample_2D = image_points[sample_indices]
-        
-        # Degeneracy check
-        if np.linalg.norm(sample_3D[0] - sample_3D[1]) < 1e-3:
-            continue
-        
-        valid, R, t = planar_2pt_pnp(sample_3D, sample_2D, camera_matrix)
-        if not valid:
-            continue
-        
-        rvec, _ = cv2.Rodrigues(R)  # Convert to vector
-        
-        projected_points, _ = cv2.projectPoints(triangulated_points, rvec, t, camera_matrix, None)
-        projected_points = projected_points.reshape(-1, 2)
-        
-        errors = np.linalg.norm(projected_points - image_points, axis=1)
-        inliers = np.where(errors < rep_error_threshold)[0]
-        
-        if len(inliers) > len(best_inliers):
-            best_inliers = inliers
-            best_rvec = rvec
-            best_tvec = t
-            
-            # Adaptive iterations
-            current_outlier = 1 - len(inliers) / N
-            if current_outlier < 1e-3:
-                break
-            remaining_iters = int(np.ceil(np.log(1 - confidence) / np.log(1 - (1 - current_outlier)**2)))
-            iterations = min(i + remaining_iters, 1000)
-    
-    if len(best_inliers) < 4:
-        return None, None, []  # No good model
-    
-    # Refinement on inliers
-    inlier_3D = triangulated_points[best_inliers]
-    inlier_2D = image_points[best_inliers]
-    _, refined_rvec, refined_tvec = cv2.solvePnP(inlier_3D, inlier_2D, camera_matrix, None, flags=cv2.SOLVEPNP_ITERATIVE, useExtrinsicGuess=True, rvec=best_rvec, tvec=best_tvec)
-    
-    # Project to planar 3DoF
-    refined_tvec[1] = 0
-    R_ref, _ = cv2.Rodrigues(refined_rvec)
-    theta = np.arctan2(R_ref[0,2], R_ref[0,0])
-    R_planar = np.array([[np.cos(theta), 0, np.sin(theta)], [0, 1, 0], [-np.sin(theta), 0, np.cos(theta)]])
-    refined_rvec, _ = cv2.Rodrigues(R_planar)
-    
-    return refined_rvec, refined_tvec, best_inliers
-
-
 def orthogonalize_to_planar_motion(R, alpha=0.8):
     """
         Orthogonalize rotation matrix R to planar motion by blending with optimal planar rotation.
@@ -467,16 +330,3 @@ def orthogonalize_to_planar_motion(R, alpha=0.8):
         R_planar = U @ np.diag([1, 1, -1]) @ Vt
         
     return R_planar
-
-
-def is_valid_keyframe(t, points_3D, threshold_ratio=0.1):
-    """
-    
-    """
-    
-    avg_depth = np.mean(points_3D[:, 2])
-    
-    ratio = np.linalg.norm(t) / avg_depth
-    if ratio > threshold_ratio:
-        return True
-    return False

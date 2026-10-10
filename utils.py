@@ -22,15 +22,6 @@ def save_transformation_matrix(output_file, transformation_matrix: np.ndarray):
     with open(output_file, 'a') as f:
         f.write(line + '\n')
 
-def merge_images(left_prev, right_prev, left_curr, right_curr):
-    top = np.hstack((left_prev, right_prev))
-    bottom = np.hstack((left_curr, right_curr))
-    merged = np.vstack((top, bottom))
-    return merged
-
-def plot_matches(img1, kp1, img2, kp2, matches):
-    return cv2.drawMatches(img1, kp1, img2, kp2, matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-
 def rotationMatrixToEulerAngles(R):
     sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
     singular = sy < 1e-6
