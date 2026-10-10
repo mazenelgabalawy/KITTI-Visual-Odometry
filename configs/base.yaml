@@ -1,0 +1,25 @@
+run:
+  sequences: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  dataset_path: ./sequences
+  output_dir: results/base
+
+detector:
+  nfeatures: 3000
+  scale_factor: 1.6
+  nlevels: 8
+
+temporal_matcher:
+  norm: NORM_HAMMING
+  cross_check: true
+
+stereo_matcher:
+  kind: bruteforce
+  cross_check: true
+
+pnp:
+  confidence: 0.99
+  iterations_count: 100
+  seed: 42
+
+motion:
+  interpolate_on_skip: false

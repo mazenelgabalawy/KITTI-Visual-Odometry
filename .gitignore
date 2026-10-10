@@ -5,3 +5,12 @@ data_odometry_gray.zip
 .visual_odometry/
 .vscode/
 __pycache__/
+results/
+*.egg-info/
+.pytest_cache/
+ground_truth/
+data_odometry_poses.zip
+sequences
+.bench/
+build/
+dist/

@@ -1,0 +1,262 @@
+"""Tests for kitti_slam.odometry.pipeline / factory (Module 5).
+
+All tests here are synthetic and always run (no KITTI dataset needed).
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+
+import numpy as np
+import pytest
+
+from kitti_slam.config import load_config
+from kitti_slam.config.schema import MotionConfig, PnPConfig
+from kitti_slam.datasets.base import StereoFrame, StereoSequence
+from kitti_slam.features.base import FeatureDetector, Features, Matcher
+from kitti_slam.features.grid_filter import GridKeypointFilter
+from kitti_slam.features.matchers import BruteForceMatcher, RectifiedStereoMatcher
+from kitti_slam.features.orb import OrbDetector
+from kitti_slam.geometry.calibration import StereoCalibration
+from kitti_slam.odometry.base import PoseEstimate, PoseEstimator
+from kitti_slam.odometry.factory import build_pipeline
+from kitti_slam.odometry.motion_filters import NullMotionFilter, PlanarMotionFilter
+from kitti_slam.odometry.pipeline import StereoVOPipeline
+from kitti_slam.odometry.pose_estimation import DepthUncertaintyFilter, PnPRansacEstimator
+
+# ---------------------------------------------------------------------------
+# Factory tests
+# ---------------------------------------------------------------------------
+
+
+def test_factory_base_variant(repo_root):
+    cfg = load_config(repo_root / "configs" / "base.yaml")
+    pipeline = build_pipeline(cfg)
+
+    assert isinstance(pipeline, StereoVOPipeline)
+    assert isinstance(pipeline.detector, OrbDetector)
+    assert pipeline.detector.keypoint_filter is None
+    assert isinstance(pipeline.temporal_matcher, BruteForceMatcher)
+    assert isinstance(pipeline.stereo_matcher, BruteForceMatcher)
+    assert pipeline.stereo_matcher.ratio_threshold is None
+    assert isinstance(pipeline.motion_filter, NullMotionFilter)
+    assert pipeline.landmark_filter is None
+    assert isinstance(pipeline.pose_estimator, PnPRansacEstimator)
+    assert pipeline.interpolate_on_skip is False
+
+
+def test_factory_constrained_variant(repo_root):
+    cfg = load_config(repo_root / "configs" / "constrained.yaml")
+    pipeline = build_pipeline(cfg)
+
+    assert isinstance(pipeline.detector, OrbDetector)
+    assert isinstance(pipeline.detector.keypoint_filter, GridKeypointFilter)
+    assert isinstance(pipeline.temporal_matcher, BruteForceMatcher)
+    assert pipeline.temporal_matcher.ratio_threshold == 0.5
+    assert isinstance(pipeline.stereo_matcher, RectifiedStereoMatcher)
+    assert isinstance(pipeline.motion_filter, PlanarMotionFilter)
+    assert isinstance(pipeline.landmark_filter, DepthUncertaintyFilter)
+    assert pipeline.interpolate_on_skip is True
+
+
+# ---------------------------------------------------------------------------
+# Synthetic in-memory stereo sequence
+# ---------------------------------------------------------------------------
+
+
+class InMemoryStereoSequence(StereoSequence):
+    def __init__(self, frames: list[StereoFrame], calibration: StereoCalibration):
+        self._frames = frames
+        self._calibration = calibration
+
+    def __len__(self) -> int:
+        return len(self._frames)
+
+    def __getitem__(self, idx: int) -> StereoFrame:
+        return self._frames[idx]
+
+    @property
+    def calibration(self) -> StereoCalibration:
+        return self._calibration
+
+
+def _make_synthetic_sequence(n_frames: int = 5, step_px: int = 6, depth: float = 20.0):
+    """Builds a synthetic stereo sequence approximating a fronto-parallel
+    textured plane at fixed depth, viewed by a camera translating laterally.
+
+    A wide random-texture canvas is generated once; each frame's left/right
+    images are pixel-exact crops of that canvas, offset frame-to-frame by
+    step_px (simulating lateral translation) and offset left-to-right by the
+    disparity implied by (focal_length, baseline, depth).
+    """
+    rng = np.random.default_rng(1234)
+
+    height, width = 240, 320
+    focal = 700.0
+    baseline = 0.54
+    cx, cy = width / 2.0, height / 2.0
+    disp_px = int(round(focal * baseline / depth))
+
+    margin = 40
+    canvas_width = margin + n_frames * step_px + width + disp_px + margin
+    canvas = rng.integers(0, 256, size=(height, canvas_width), dtype=np.uint8)
+
+    P0 = np.array([[focal, 0.0, cx, 0.0], [0.0, focal, cy, 0.0], [0.0, 0.0, 1.0, 0.0]])
+    P1 = np.array([[focal, 0.0, cx, -focal * baseline], [0.0, focal, cy, 0.0], [0.0, 0.0, 1.0, 0.0]])
+    calib = StereoCalibration.from_projection_matrices(P0, P1)
+
+    frames = []
+    for k in range(n_frames):
+        left_start = margin + k * step_px
+        right_start = left_start + disp_px
+        left_img = canvas[:, left_start : left_start + width]
+        right_img = canvas[:, right_start : right_start + width]
+        frames.append(StereoFrame(index=k, left=left_img.copy(), right=right_img.copy()))
+
+    expected_translation_per_frame = step_px * depth / focal
+    return InMemoryStereoSequence(frames, calib), expected_translation_per_frame
+
+
+def test_pipeline_runs_synthetic_sequence(repo_root):
+    cfg = load_config(repo_root / "configs" / "base.yaml")
+    # Keep PnP RANSAC deterministic and iteration count modest for test speed.
+    cfg = cfg.__class__(
+        run=cfg.run,
+        detector=cfg.detector,
+        temporal_matcher=cfg.temporal_matcher,
+        stereo_matcher=cfg.stereo_matcher,
+        pnp=PnPConfig(confidence=0.999, iterations_count=500, seed=42),
+        motion=cfg.motion,
+        grid_filter=cfg.grid_filter,
+        landmark_filter=cfg.landmark_filter,
+    )
+    pipeline = build_pipeline(cfg)
+
+    sequence, expected_t = _make_synthetic_sequence(n_frames=5, step_px=6, depth=20.0)
+
+    poses = pipeline.run(sequence, progress=False)
+
+    assert poses.shape == (5, 3, 4)
+    np.testing.assert_allclose(poses[0], np.eye(3, 4), atol=1e-9)
+
+    translations = poses[:, :, 3]
+    # Non-identity motion recovered: later frames should have moved from the origin.
+    assert np.linalg.norm(translations[-1]) > 1e-3
+
+    # Loose sanity check on magnitude: per-frame translation should be in the
+    # right ballpark for the planar approximation (within a generous factor).
+    per_frame_deltas = np.diff(translations, axis=0)
+    per_frame_norms = np.linalg.norm(per_frame_deltas, axis=1)
+    nonzero = per_frame_norms[per_frame_norms > 0]
+    if len(nonzero) > 0:
+        assert np.median(nonzero) < expected_t * 5 + 1.0
+
+    # Monotonic drift: x-translation should not oscillate in sign once motion starts.
+    xs = translations[:, 0]
+    nonzero_xs = xs[np.abs(xs) > 1e-6]
+    if len(nonzero_xs) > 1:
+        signs = np.sign(nonzero_xs)
+        assert len(set(signs.tolist())) == 1
+
+
+# ---------------------------------------------------------------------------
+# Skip-policy tests
+# ---------------------------------------------------------------------------
+
+
+class _EmptyDetector(FeatureDetector):
+    def detect(self, image: np.ndarray) -> Features:
+        return Features(keypoints=[], descriptors=np.empty((0, 32), dtype=np.uint8))
+
+
+class _EmptyMatcher(Matcher):
+    def match(self, feat_a: Features, feat_b: Features) -> list:
+        return []
+
+
+class _AlwaysFailEstimator(PoseEstimator):
+    def estimate(self, points_3d, points_2d, K) -> PoseEstimate:
+        return PoseEstimate(R=None, t=None, inliers=None, success=False)
+
+
+def _make_trivial_sequence(n_frames: int = 4) -> InMemoryStereoSequence:
+    P0 = np.array([[700.0, 0.0, 160.0, 0.0], [0.0, 700.0, 120.0, 0.0], [0.0, 0.0, 1.0, 0.0]])
+    P1 = np.array([[700.0, 0.0, 160.0, -700.0 * 0.54], [0.0, 700.0, 120.0, 0.0], [0.0, 0.0, 1.0, 0.0]])
+    calib = StereoCalibration.from_projection_matrices(P0, P1)
+    frames = [
+        StereoFrame(index=k, left=np.zeros((10, 10), dtype=np.uint8), right=np.zeros((10, 10), dtype=np.uint8))
+        for k in range(n_frames)
+    ]
+    return InMemoryStereoSequence(frames, calib)
+
+
+def test_skip_policy():
+    sequence = _make_trivial_sequence(n_frames=4)
+
+    base_pipeline = StereoVOPipeline(
+        detector=_EmptyDetector(),
+        temporal_matcher=_EmptyMatcher(),
+        stereo_matcher=_EmptyMatcher(),
+        landmark_filter=None,
+        pose_estimator=_AlwaysFailEstimator(),
+        motion_filter=NullMotionFilter(),
+        interpolate_on_skip=False,
+    )
+    base_poses = base_pipeline.run(sequence, progress=False)
+
+    assert base_poses.shape == (4, 3, 4)
+    for pose in base_poses:
+        np.testing.assert_allclose(pose, np.eye(3, 4), atol=1e-12)
+
+    constrained_pipeline = StereoVOPipeline(
+        detector=_EmptyDetector(),
+        temporal_matcher=_EmptyMatcher(),
+        stereo_matcher=_EmptyMatcher(),
+        landmark_filter=None,
+        pose_estimator=_AlwaysFailEstimator(),
+        motion_filter=PlanarMotionFilter(
+            MotionConfig(max_translation=15.0, max_pitch_deg=30.0, orthogonalize_alpha=0.8, interpolate_on_skip=True)
+        ),
+        interpolate_on_skip=True,
+    )
+    constrained_poses = constrained_pipeline.run(sequence, progress=False)
+
+    assert constrained_poses.shape == (4, 3, 4)
+    # T_prev starts at identity and is never updated (no successful frame ever
+    # happens), so interpolating C_k @ homogeneous(identity) leaves C_k unchanged.
+    for pose in constrained_poses:
+        np.testing.assert_allclose(pose, np.eye(3, 4), atol=1e-12)
+
+    np.testing.assert_allclose(base_poses, constrained_poses, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# run_vo.py safety guard
+# ---------------------------------------------------------------------------
+
+
+def _load_run_vo_module(repo_root):
+    module_path = repo_root / "scripts" / "run_vo.py"
+    spec = importlib.util.spec_from_file_location("run_vo_under_test", module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["run_vo_under_test"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_run_vo_refuses_baseline_dirs(repo_root):
+    run_vo = _load_run_vo_module(repo_root)
+
+    with pytest.raises(SystemExit):
+        run_vo.guard_output_dir("output_base", repo_root)
+
+    with pytest.raises(SystemExit):
+        run_vo.guard_output_dir("output_constrained", repo_root)
+
+    with pytest.raises(SystemExit):
+        run_vo.guard_output_dir("output_base/04", repo_root)
+
+    # A sibling directory that merely shares a prefix must NOT be refused.
+    resolved = run_vo.guard_output_dir("output_base_experiment", repo_root)
+    assert resolved == (repo_root / "output_base_experiment").resolve()

@@ -1,0 +1,41 @@
+run:
+  sequences: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  dataset_path: ./sequences
+  output_dir: results/constrained
+
+detector:
+  nfeatures: 3000
+  scale_factor: 1.2
+  nlevels: 8
+
+grid_filter:
+  grid_size: [50, 30]
+  max_per_grid: 7
+
+temporal_matcher:
+  norm: NORM_HAMMING
+  cross_check: true
+  ratio_threshold: 0.5
+
+stereo_matcher:
+  kind: rectified
+  cross_check: true
+  pixel_threshold: 2.0
+  max_hamming_distance: 50
+  ratio_test: 0.8
+  max_disparity: 64.0
+
+landmark_filter:
+  min_depth_multiplier: 3
+  relative_depth_uncertainty_threshold: 0.5
+
+pnp:
+  confidence: 0.99
+  iterations_count: 2000
+  seed: 42
+
+motion:
+  max_translation: 15.0
+  max_pitch_deg: 30
+  orthogonalize_alpha: 0.8
+  interpolate_on_skip: true

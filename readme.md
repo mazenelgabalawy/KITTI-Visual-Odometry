@@ -1,129 +1,151 @@
-# Setting up the Environment
-Create a Python virtual environment and install all dependencies using:
+# KITTI stereo visual odometry
 
-```bash
-pip install -r requirements.txt
+Stereo visual odometry on the KITTI odometry benchmark, packaged as
+`kitti_slam` (`src/kitti_slam/`), with command-line tools in `scripts/` and
+pipeline configurations in `configs/`. The `base` and `constrained` pipelines
+are two configurations of one shared pipeline.
+
+What works today is stereo VO, trajectory evaluation, and feature/match
+visualization. Bundle adjustment, mapping, loop closure, monocular VO, and
+reconstruction are **not implemented** yet. See
+[docs/compatibility.md](docs/compatibility.md) for the capability status.
+
+## Layout
+
+```text
+src/kitti_slam/
+  config/       frozen-dataclass configs + YAML loader
+  datasets/     KITTI stereo sequences, prefetching
+  features/     ORB, grid selection, brute-force / rectified stereo matching, association
+  geometry/     calibration, triangulation, SE(3)/SO(3) helpers
+  odometry/     pipeline, factory, PnP, motion filters, stage timing
+  evaluation/   pose-file I/O and validation, metrics (SI units), plots
+  protected_paths.py, provenance.py   output protection, input hashing
+scripts/        run_vo, evaluate, visualize_features
+configs/        base.yaml, constrained.yaml
+tests/          unit/ (CI) and regression/ (needs KITTI data)
+docs/           evaluation definitions, compatibility, errata
 ```
 
-Ensure you have the EVO tool installed for evaluation (see EVO documentation for installation instructions if needed).
+## Setup
 
-# Running Base Pipeline
-To run the base visual odometry pipeline, use the following command:
-
-```bash
-python VO_base.py
-```
-
-This script loads configuration from `config/base.yaml`. By default, it processes all 11 sequences (0-10) from the KITTI dataset and outputs results to the `output_base` directory. The KITTI dataset path is sepecified in the `dataset_path` parameter in `config/base.yaml`.
-
-### Customizing the Base Pipeline
-- **Sequences**: To specify which sequences to process, edit the `sequences` list in `config/base.yaml`. For example:
-  ```
-  sequences: [0, 4, 7]
-  ```
-  This will run only sequences 00, 04, and 07.
-- **Output Directory**: To change the output folder (where poses.txt files are saved for each sequence), modify the `output_dir` parameter in `config/base.yaml`. For example:
-  ```
-  output_dir: output_base_custom
-  ```
-- **Other Parameters**: Additional tunable parameters include `nfeatures` (number of ORB features), `scale` (ORB scale factor), `nlevels` (ORB pyramid levels), `matching_norm` (e.g., NORM_HAMMING), `cross_check` (boolean for cross-checking matches), `pnp_confidence`, and `pnp_iterations_count`. Adjust these as needed for experimentation, but default values are provided in the YAML file.
-
-The script will create subdirectories for each sequence in the specified output directory and save the estimated trajectory as `poses.txt`.
-
-# Running Constrained Pipeline
-To run the constrained visual odometry pipeline (which includes additional filters like depth thresholds, motion constraints, and grid-based feature clustering), use the following command:
+Python 3.12:
 
 ```bash
-python VO_constrained.py
+python3.12 -m venv .visual_odometry
+source .visual_odometry/bin/activate
+pip install -e ".[dev,eval]"      # package + tests/lint + evo metrics
 ```
 
-This script loads configuration from `config/constrained.yaml`. By default, it processes all 11 sequences (0-10) from the KITTI dataset and outputs results to the `output_constrained` directory. The KITTI dataset path is sepecified in the `dataset_path` parameter in `config/constrained.yaml`.
+| Extra | Provides | Needed for |
+|---|---|---|
+| (none) | numpy, OpenCV (`opencv-python-headless`), PyYAML, tqdm, scipy, matplotlib | running VO |
+| `eval` | `evo` | `scripts/evaluate.py`, the metric tests |
+| `dev` | pytest, ruff, pre-commit | development |
+| `slam` | `gtsam==4.2.1` (the only release with Python 3.12 wheels) | future BA/graph work; nothing uses it yet |
 
-### Customizing the Constrained Pipeline
-- **Sequences**: To specify which sequences to process, edit the `sequences` list in `config/constrained.yaml`. For example:
-  ```
-  sequences: [0, 4, 7]
-  ```
-  This will run only sequences 00, 04, and 07.
-- **Output Directory**: To change the output folder, modify the `output_dir` parameter in `config/constrained.yaml`. For example:
-  ```
-  output_dir: output_constrained_custom
-  ```
-- **Other Parameters**: This pipeline has more parameters for fine-tuning, including:
-  - Feature detection: `nfeatures`, `scale`, `nlevels`, `grid_size` (e.g., [50, 30]), `max_per_grid`.
-  - Depth and uncertainty filters: `min_depth_multiplier` (multiplied by baseline for minimum depth), `relative_depth_uncertainty_threshold`.
-  - Motion constraints: `max_translation` (max allowed translation in meters), `max_pitch_deg` (max allowed pitch in degrees).
-  - Matching: `matching_norm`, `temporal_inlier_threshold`, `temporal_cross_check`, `stereo_cross_check`, `stereo_pixel_threshold`, `stereo_max_hamming_distance`, `stereo_ratio_test`, `stereo_max_disparity`.
-  - PnP: `pnp_confidence`, `pnp_iterations_count`.
-  - Other: `orthogonalize_alpha` for planar motion orthogonalization.
-  
-  Default values are provided in the YAML file. Adjust them based on your needs, such as increasing `nfeatures` for denser matching or tightening `max_translation` for stricter motion constraints.
+Core VO imports work without `evo` and `gtsam`. The package depends on the
+headless OpenCV wheel, because it never opens windows. Do not install `opencv-python` next to it:
+both wheels provide `cv2`. `requirements.txt` pins a complete development
+environment that matches `pyproject.toml`.
 
-The script will create subdirectories for each sequence in the specified output directory and save the estimated trajectory as `poses.txt`. If a frame is skipped due to insufficient points or excessive motion, it interpolates using the previous transformation.
+## Data
 
-# Creating EVO Results
-To evaluate the estimated trajectories using the EVO tool, run the following commands (assuming you have ground truth files from the KITTI dataset in a known path, e.g., `ground_truth/poses/`):
+Expected layout (all paths are gitignored):
 
-For Absolute Pose Error (APE) calculation:
+```text
+sequences/XX/image_0/*.png   # left grayscale
+sequences/XX/image_1/*.png   # right grayscale
+sequences/XX/calib.txt
+poses/XX.txt                 # ground truth for 00–10 (ground_truth/poses/ also works)
+```
+
+`run.dataset_path` in the configs is resolved against the repository root.
+Override it with `--dataset-path`. Sequences 11–21 have no public ground truth.
+
+## Run VO
 
 ```bash
-evo_ape kitti ./path_to_ground_truth/poses/XX.txt ./path_to_estimated_trajectory/poses.txt -p --plot_mode xz
+python scripts/run_vo.py --config configs/constrained.yaml --sequence 4 --output results/constrained
+python scripts/run_vo.py --config configs/base.yaml          # all sequences in the config
 ```
 
-For Relative Pose Error (RPE) calculation (e.g., over 100 meters):
+Each sequence is written to `<output>/XX/poses.txt` in KITTI format: 3×4
+camera-to-world pose, row-major, `%.6e`, one line per frame. The first line is the identity.
+Add `--timing` for a per-stage timing table. Outputs that resolve into
+`output_base/`, `output_constrained/`, or `reference/` are refused.
+
+## Evaluate
 
 ```bash
-evo_rpe kitti ./path_to_ground_truth/poses/XX.txt ./path_to_estimated_trajectory/poses.txt -p --plot_mode xz --delta 100 --delta_unit m
+python scripts/evaluate.py --results-dir results/constrained --plots
 ```
 
-Replace `--delta` and `--delta_unit` values as needed (e.g., use `--delta 1 --delta_unit f` for per-frame RPE).
+**All error metrics are in SI units**: m, rad, m/m, rad/m. **RPE defaults to
+100 m segments.** By default the script computes:
 
-For Trajectory comparison:
+- `metric_distance`: APE, plus RPE over 100 m pairs chosen on the ground-truth path, so every estimate is scored on the same pairs.
+- `kitti_segments`: KITTI devkit drift over 100–800 m segments, in m/m and rad/m.
+
+`--profiles legacy_frames` reproduces the historical numbers, which use RPE over 100
+**frames**. Results go to `XX/metrics/<profile>.{json,txt}` and, with `--plots`,
+`XX/plots/`. See [docs/evaluation.md](docs/evaluation.md) for the exact definitions.
+
+## Visualize features and matches
 
 ```bash
-evo_traj kitti --ref ./path_to_ground_truth/poses/XX.txt ./path_to_estimated_trajectory/poses.txt -p --plot_mode xyz
+python scripts/visualize_features.py --config configs/constrained.yaml --sequence 0 --frame 0 \
+    --output results/figures/00_000000 --compare-sift
 ```
 
-Replace `XX` with the sequence number (e.g., 00), `./path_to_ground_truth/` with the actual ground truth directory, and `./path_to_estimated_trajectory/` with your output (e.g., `output_base/00/`).
+This draws one frame using the config's own detector and matchers. It writes:
 
-# Saving All Results Using a Script
-To automate running the above EVO commands for all (or specific) sequences and save the results (text files and plots) in the output folder, use the bash script:
+- `keypoints.png`: ORB keypoints before and after grid selection.
+- `stereo_matches.png`: brute-force matches vs. the configured stereo matcher.
+- `temporal_matches.png`: matches from frame k to frame k+1.
+- `orb_vs_sift.png`: optional, with `--compare-sift`.
+
+## Tests and lint
 
 ```bash
-./create_results.sh <path_to_output_folder>
+pytest tests -m "not regression" -q   # unit tier (what CI runs)
+pytest tests -q                       # + regression tier (needs KITTI images and ground truth)
+ruff check . && ruff format --check .
 ```
 
-Replace `<path_to_output_folder>` with the path to the folder containing the output data (e.g., the one specified in your YAML config), such as:
+Regression tests skip, rather than pass, when their data is missing.
 
-```bash
-./create_results.sh ./output_constrained/
-```
+## Known issues
 
-By default, the script processes all sequences (00-10) found in the output folder. To process a specific sequence, provide it as an additional argument:
+This is a research package evaluated on KITTI. The next phase fixes only defects
+that affect the estimates:
 
-```bash
-./create_results.sh <path_to_output_folder> <sequence_name>
-```
+- Triangulated points are not validated. The base configuration passes points with
+  non-positive depth to PnP (BUG-003).
+- The PnP solver's return status and outputs are not checked (BUG-002).
+- Grid selection merges the partial bottom and right cells on KITTI image sizes (BUG-006).
+- The rectified stereo matcher picks the best descriptor before checking its geometry (BUG-005).
+- `stereo_matcher.cross_check` is ignored for the base (brute-force) stereo
+  matcher, which uses the temporal value instead (BUG-004).
+- On a failed registration, the base configuration holds the previous pose and the
+  constrained configuration repeats the last motion (`motion.interpolate_on_skip`).
+  Both will assume constant velocity (BUG-013).
 
-For example:
+Known limitations, not planned because they do not affect KITTI estimates:
 
-```bash
-./create_results.sh ./output_constrained/ 01
-```
+- A frame without ORB descriptors (for example a blank image) would crash the base pipeline.
+- There is no input preflight, and no atomic or resumable output.
+- `pnp.seed` has no effect.
+- `motion.max_pitch_deg` gates rotation about camera *y*. That is the heading axis, not pitch.
 
-The script assumes ground truth files are in a `ground_truth/poses/` directory relative to the script (update the script if your ground truth path differs). It will generate APE, RPE, and trajectory files/plots in each sequence's subdirectory.
+## Historical material
 
-# Viewing the Results
-After running the EVO commands or the script, you can find the generated results in the specified output folder's sequence subdirectories. These include:
-- Text files: e.g., `ape_results.txt`, `rpe_results.txt` with error metrics.
-- Plots: e.g., `ape_plot_map.png` (APE error map), `trajectory_plot_xyz.png` (3D trajectory overlay), `rpe_plot.png` (RPE errors).
-
-Example plots from sequence 00 in `output_constrained/`:
-
-![APE Map](./output_constrained/00/ape_plot_map.png)
-![Trajectory Plot](./output_constrained/00/trajectory_plot_xyz.png)
-
-For interpretation:
-- **APE** measures global consistency (total drift).
-- **RPE** measures local accuracy (frame-to-frame errors).
-- Lower errors indicate better odometry performance. Compare against KITTI benchmarks for context.
+- `output_base/` and `output_constrained/` hold the original results. They are
+  write-protected, and `output_base/01/poses.txt` is truncated.
+- `output_features/`, `keypoints/`, and the root `*.png` files are figures from the original scripts.
+- `VO_Seminar.pdf` is the original report. Its corrections, including that its
+  "100 m" RPE is a 100-frame RPE, are in
+  [docs/errata/vo-seminar-errata.md](docs/errata/vo-seminar-errata.md).
+- The original root scripts (`VO_*.py`, `filter.py`, `utils.py`,
+  `create_results.sh`, `config/`, …) were removed after the port was verified.
+  They remain in Git at revision `461c8fe`.

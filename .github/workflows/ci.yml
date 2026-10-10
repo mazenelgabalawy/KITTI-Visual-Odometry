@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # Headless-safe defaults: no display / GUI backend is available on the
+      # runner, so force matplotlib onto a non-interactive backend.
+      QT_QPA_PLATFORM: offscreen
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package + dev and eval dependencies
+        # `eval` (evo) is part of the test environment: the metric tests import
+        # it at collection time, before `-m "not regression"` deselects anything.
+        # The package declares opencv-python-headless, so no OpenCV swap is needed.
+        run: |
+          pip install -e ".[dev,eval]"
+          pip check
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Run unit tests (regression tier needs the KITTI dataset, skipped here)
+        run: pytest tests -m "not regression" -q
+
+  package:
+    # Builds the wheel and installs it into a fresh venv *outside* the checkout,
+    # so imports resolve from site-packages rather than src/. Core VO must import
+    # without the optional eval (evo) and slam (gtsam) backends.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip
+          pip wheel . --no-deps -w dist
+
+      - name: Install wheel into a clean venv and import core modules
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv core-venv
+          core-venv/bin/pip install "$GITHUB_WORKSPACE"/dist/kitti_slam-*.whl
+          core-venv/bin/pip check
+          core-venv/bin/python - <<'EOF'
+          import importlib, sys
+          import kitti_slam
+          assert "site-packages" in kitti_slam.__file__, kitti_slam.__file__
+          for name in (
+              "kitti_slam.config.loader",
+              "kitti_slam.datasets.kitti",
+              "kitti_slam.datasets.prefetch",
+              "kitti_slam.odometry.factory",
+              "kitti_slam.odometry.pipeline",
+              "kitti_slam.evaluation.trajectory_io",
+              "kitti_slam.evaluation.pose_checks",
+          ):
+              importlib.import_module(name)
+          for optional in ("evo", "gtsam"):
+              assert optional not in sys.modules, f"core import pulled in {optional}"
+          print("core imports OK from", kitti_slam.__file__)
+          EOF
+
+      - name: Install eval extra from the wheel and import metrics
+        working-directory: ${{ runner.temp }}
+        run: |
+          WHEEL=$(ls "$GITHUB_WORKSPACE"/dist/kitti_slam-*.whl)
+          core-venv/bin/pip install "${WHEEL}[eval]"
+          core-venv/bin/pip check
+          core-venv/bin/python -c "import kitti_slam.evaluation.metrics as m; print(sorted(m.PROFILES))"
