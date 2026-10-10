@@ -26,7 +26,7 @@ if __name__ == "__main__":
     min_depth_multiplier = config['min_depth_multiplier']  # For min_depth = min_depth_multiplier * base_line
     max_translation = config['max_translation']
     max_pitch_deg = config['max_pitch_deg']  # Renamed for clarity, since it's used for pitch
-    matching_norm = config['matching_norm']
+    matching_norm = getattr(cv2, config['matching_norm'])  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
     temporal_inlier_threshold = config['temporal_inlier_threshold']
     temporal_cross_check = config['temporal_cross_check']
     stereo_cross_check = config['stereo_cross_check']
@@ -90,7 +90,6 @@ if __name__ == "__main__":
         
         # Create ORB detector
         orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor=scale, nlevels=nlevels)
-        matching_norm = getattr(cv2, matching_norm)  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
         
         # Initialize previous images
         left_prev, right_prev = load_stereo_pair(0, input_folder)

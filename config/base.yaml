@@ -1,6 +1,6 @@
 sequences: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 dataset_path: ./sequences
-output_dir: output_base
+output_dir: results/base
 nfeatures: 3000
 scale: 1.6
 nlevels: 8

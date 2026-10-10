@@ -22,7 +22,7 @@ if __name__ == "__main__":
     nfeatures = config['nfeatures']
     scale = config['scale']
     nlevels = config['nlevels']
-    matching_norm = config['matching_norm']
+    matching_norm = getattr(cv2, config['matching_norm'])  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
     cross_check = config['cross_check']
     pnp_confidence = config['pnp_confidence']
     pnp_iterations_count = config['pnp_iterations_count']
@@ -73,8 +73,6 @@ if __name__ == "__main__":
                 
         # Initialize previous images
         left_prev, right_prev = load_stereo_pair(0, input_folder)    
-
-        matching_norm = getattr(cv2, matching_norm)  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
         
         # Create ORB detector
         orb = cv2.ORB_create(nfeatures=nfeatures, scaleFactor=scale, nlevels=nlevels)

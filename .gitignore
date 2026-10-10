@@ -5,3 +5,4 @@ data_odometry_gray.zip
 .visual_odometry/
 .vscode/
 __pycache__/
+results/
