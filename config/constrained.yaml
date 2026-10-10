@@ -21,4 +21,5 @@ relative_depth_uncertainty_threshold: 0.5
 min_abs_w: 1.0e-4
 pnp_confidence: 0.99
 pnp_iterations_count: 2000
+pnp_min_inliers: 6
 orthogonalize_alpha: 0.8

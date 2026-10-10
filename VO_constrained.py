@@ -38,6 +38,7 @@ if __name__ == "__main__":
     min_abs_w = config['min_abs_w']  # Triangulated points with |w| < min_abs_w (beyond ~1/min_abs_w m) are rejected
     pnp_confidence = config['pnp_confidence']
     pnp_iterations_count = config['pnp_iterations_count']
+    pnp_min_inliers = config['pnp_min_inliers']
     orthogonalize_alpha = config['orthogonalize_alpha']
     
     for i in sequences:
@@ -176,7 +177,26 @@ if __name__ == "__main__":
             points_3D = points_3D.astype(np.float32)
             left_curr_pts = left_curr_pts.astype(np.float32)
 
-            _, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None, confidence=pnp_confidence, iterationsCount=pnp_iterations_count)
+            success, rvec, tvec, inliers = cv2.solvePnPRansac(points_3D, left_curr_pts, Kp_left, None, confidence=pnp_confidence, iterationsCount=pnp_iterations_count)
+            
+            # Accept the pose only if PnP succeeded with a finite pose and enough inliers
+            num_inliers = 0 if inliers is None else len(inliers)
+            if not success or not (np.isfinite(rvec).all() and np.isfinite(tvec).all()) or num_inliers < pnp_min_inliers:
+                print(f"Frame {k}: PnP failed ({num_inliers} inliers). Skipping frame.")
+                # PnP failed; skip this frame
+                left_prev = left_curr
+                right_prev = right_curr
+                
+                left_feat_prev = left_feat_curr
+                left_desc_prev = left_desc_curr
+                
+                right_feat_prev = right_feat_curr
+                right_desc_prev = right_desc_curr
+                
+                # Constant velocity: propagate the pose with the previous transformation
+                C_k = C_k @ np.vstack((T_prev, np.array([0,0,0,1])))
+                save_transformation_matrix(output_file, C_k)
+                continue
             
             R_curr, _ = cv2.Rodrigues(rvec)
             t_curr = tvec.reshape(3)
