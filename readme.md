@@ -8,7 +8,7 @@ are two configurations of one shared pipeline.
 What works today is stereo VO, trajectory evaluation, and feature/match
 visualization. Bundle adjustment, mapping, loop closure, monocular VO, and
 reconstruction are **not implemented** yet. See
-[docs/compatibility.md](docs/compatibility.md) for the capability status.
+[docs/capabilities.md](docs/capabilities.md) for the capability status and the configuration reference.
 
 ## Layout
 
@@ -24,7 +24,7 @@ src/kitti_slam/
 scripts/        run_vo, evaluate, visualize_features
 configs/        base.yaml, constrained.yaml
 tests/          unit/ (CI) and regression/ (needs KITTI data)
-docs/           evaluation definitions, compatibility, errata
+docs/           capabilities and configuration, evaluation definitions, errata
 ```
 
 ## Setup
@@ -90,8 +90,7 @@ python scripts/evaluate.py --results-dir results/constrained --plots
 - `metric_distance`: APE, plus RPE over 100 m pairs chosen on the ground-truth path, so every estimate is scored on the same pairs.
 - `kitti_segments`: KITTI devkit drift over 100–800 m segments, in m/m and rad/m.
 
-`--profiles legacy_frames` reproduces the historical numbers, which use RPE over 100
-**frames**. Results go to `XX/metrics/<profile>.{json,txt}` and, with `--plots`,
+Results go to `XX/metrics/<profile>.{json,txt}` and, with `--plots`,
 `XX/plots/`. See [docs/evaluation.md](docs/evaluation.md) for the exact definitions.
 
 ## Visualize features and matches
@@ -122,7 +121,7 @@ Regression tests skip, rather than pass, when their data is missing.
 
 This is a research package evaluated on KITTI. The defects that affected the
 estimates are corrected; the corrections and their measured effects are listed in
-[docs/compatibility.md](docs/compatibility.md) §4b.
+[docs/capabilities.md](docs/capabilities.md) §4.
 
 Known limitations, not fixed because they do not affect KITTI estimates:
 
@@ -139,6 +138,4 @@ Known limitations, not fixed because they do not affect KITTI estimates:
 - `VO_Seminar.pdf` is the original report. Its corrections, including that its
   "100 m" RPE is a 100-frame RPE, are in
   [docs/errata/vo-seminar-errata.md](docs/errata/vo-seminar-errata.md).
-- The original root scripts (`VO_*.py`, `filter.py`, `utils.py`,
-  `create_results.sh`, `config/`, …) were removed after the port was verified.
-  They remain in Git at revision `461c8fe`.
+- The original scripts are in Git history at revision `461c8fe`.

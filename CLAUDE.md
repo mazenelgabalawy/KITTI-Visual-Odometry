@@ -62,10 +62,9 @@ Never commit dataset files, archives, or large binaries.
 | `tests/unit/` (CI), `tests/regression/` (needs data) | `tests/unit/data/goldens.npz` freezes package outputs (`generate_goldens.py`) |
 | `output_base/`, `output_constrained/` | historical results. **Read-only.** `output_base/01/poses.txt` is truncated (see errata) |
 | `output_features/`, `keypoints/`, root `*.png`, `*.pdf` | historical figures and reports, not code |
-| `docs/` | `evaluation.md`, `compatibility.md`, `errata/` |
+| `docs/` | `capabilities.md` (capabilities, configuration reference, corrections), `evaluation.md`, `errata/` |
 
-Module docstrings cite the original `VO_*.py`/`filter.py`/`utils.py` line
-numbers. Those lines refer to `git show 461c8fe:<file>`.
+The original seminar scripts are in Git history at revision `461c8fe`.
 
 ## Running & Evaluating
 
@@ -79,9 +78,8 @@ numbers. Those lines refer to `git show 461c8fe:<file>`.
 - `run_vo.py --diagnostics` writes a per-frame `diagnostics.csv` (registration
   outcome and match/point/inlier counts) without changing the poses. Use it to
   explain every trajectory change.
-- `evaluate.py` defaults to the `metric_distance` (100 m RPE) and
-  `kitti_segments` profiles. Use `--profiles legacy_frames` only to reproduce
-  historical 100-frame numbers.
+- `evaluate.py` computes the `metric_distance` (100 m RPE) and `kitti_segments`
+  profiles.
 
 ## Conventions & Behaviors
 
