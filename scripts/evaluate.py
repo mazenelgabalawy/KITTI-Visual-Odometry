@@ -8,12 +8,11 @@ rad/m. Profiles (see kitti_slam.evaluation.metrics):
 
     metric_distance  APE + RPE over 100 m pairs selected on the reference path   [default]
     kitti_segments   KITTI devkit 100-800 m segment drift (m/m, rad/m)            [default]
-    legacy_frames    APE + RPE over 100 frames: reproduces historical numbers     [opt-in]
 
 Usage:
     python scripts/evaluate.py --results-dir results/base
     python scripts/evaluate.py --results-dir results/base --sequences 00 04 --plots
-    python scripts/evaluate.py --results-dir results/base --profiles legacy_frames
+    python scripts/evaluate.py --results-dir results/base --profiles kitti_segments
 
 Exits non-zero if any requested sequence cannot be evaluated (missing or
 invalid files, length mismatch). A metric without eligible pairs is reported
@@ -44,8 +43,7 @@ from kitti_slam.protected_paths import ProtectedPathError, check_writable  # noq
 from kitti_slam.provenance import sha256_file  # noqa: E402
 
 DEFAULT_GT_DIRS = ("poses", "ground_truth/poses")
-# RPE defaults to 100 m segments (metric_distance); the 100-frame legacy_frames
-# profile is opt-in, for reproducing historical numbers only.
+# RPE defaults to 100 m segments (metric_distance).
 DEFAULT_PROFILES = ("metric_distance", "kitti_segments")
 # Statistic shown per metric in the summary table: the KITTI score is the mean
 # segment drift; everything else reports RMSE.

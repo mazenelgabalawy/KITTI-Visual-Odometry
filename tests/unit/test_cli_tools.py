@@ -72,23 +72,14 @@ def test_evaluate_defaults_to_100m_rpe(repo_root, evaluate_inputs, capsys):
     ks = _check_si_record(results, "kitti_segments")
     assert ks["segment_rotation_drift"]["unit"] == "rad/m"
     assert ks["segment_rotation_drift"]["statistics"]["mean"] == pytest.approx(1e-4, rel=0.02)  # 1e-4 rad per m
-    # The 100-frame interval is opt-in only.
-    assert not (results / "04" / "metrics" / "legacy_frames.json").exists()
+    assert sorted(p.name for p in (results / "04" / "metrics").glob("*.json")) == [
+        "kitti_segments.json",
+        "metric_distance.json",
+    ]
 
     out = capsys.readouterr().out
-    assert "metric_distance" in out and "legacy_frames" not in out
+    assert "metric_distance" in out
     assert "rpe_translation rmse [m]" in out and "segment_translation_drift mean [m/m]" in out
-
-
-def test_evaluate_legacy_frames_is_opt_in(repo_root, evaluate_inputs):
-    gt_dir, results = evaluate_inputs
-    evaluate = _load_script(repo_root, "evaluate")
-    args = ["--results-dir", str(results), "--gt-dir", str(gt_dir), "--profiles", "legacy_frames"]
-    assert evaluate.main(args) == 0
-    lf = _check_si_record(results, "legacy_frames")
-    assert lf["rpe_translation"]["selection"]["interval_unit"] == "frames"
-    assert lf["rpe_translation"]["num_pairs"] == 2
-    assert lf["rpe_translation"]["statistics"]["mean"] == pytest.approx(5.0, rel=0.05)
 
 
 def test_evaluate_plots_are_valid_images(repo_root, evaluate_inputs):

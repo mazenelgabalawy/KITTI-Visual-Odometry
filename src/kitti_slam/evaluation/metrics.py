@@ -9,12 +9,6 @@ Units (SI throughout -- results are never converted to degrees or percent):
 
 Profiles (see `PROFILES`):
 
-``legacy_frames``
-    Reproduces the historical `create_results.sh` numbers: `evo_ape kitti` and
-    `evo_rpe kitti --delta 100` with evo's CLI default interval unit (frames),
-    consecutive pairs (0, 100), (100, 200), ..., and no alignment. The
-    historical text files label the 100-frame interval ambiguously; it is not
-    100 m. Rotation errors are added on the same poses / pairs.
 ``metric_distance`` (the default; RPE defaults to 100 m)
     For comparing experiments: 100 m RPE whose pairs are chosen on the
     reference (ground-truth) path, so every estimate is scored on the same
@@ -31,8 +25,8 @@ Profiles (see `PROFILES`):
     independently of evo, in float64.
 
 `evaluate()` defaults to ``metric_distance`` and `compute_rpe()` to its 100 m
-reference-selected pairs; the 100-frame interval is used only when
-``legacy_frames`` is requested explicitly.
+reference-selected pairs. Other pair selections (for example a frame interval)
+can be passed to `compute_rpe()` explicitly.
 
 Every result records its unit, pose relation, alignment, pair selection,
 pose and pair counts, and frame coverage. A metric with no eligible pairs is
@@ -184,15 +178,6 @@ class ProfileEvaluation:
         }
 
 
-LEGACY_FRAMES = EvaluationProfile(
-    name="legacy_frames",
-    description=(
-        "Historical create_results.sh reproduction: unaligned APE; RPE over consecutive 100-frame pairs "
-        "(evo CLI default frame unit)."
-    ),
-    include_ape=True,
-    rpe=PairSelection(interval=100, interval_unit="frames", all_pairs=False, pairs_from="index"),
-)
 METRIC_DISTANCE = EvaluationProfile(
     name="metric_distance",
     description=(
@@ -210,7 +195,7 @@ KITTI_SEGMENTS = EvaluationProfile(
     include_ape=False,
     segments=SegmentSelection(),
 )
-PROFILES: dict[str, EvaluationProfile] = {p.name: p for p in (LEGACY_FRAMES, METRIC_DISTANCE, KITTI_SEGMENTS)}
+PROFILES: dict[str, EvaluationProfile] = {p.name: p for p in (METRIC_DISTANCE, KITTI_SEGMENTS)}
 DEFAULT_PROFILE = METRIC_DISTANCE.name
 DEFAULT_RPE_SELECTION = METRIC_DISTANCE.rpe  # 100 m pairs selected on the reference path
 

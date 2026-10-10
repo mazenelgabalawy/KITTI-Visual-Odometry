@@ -14,7 +14,6 @@ from evo.core import metrics as evo_metrics
 
 from kitti_slam.evaluation.metrics import (
     KITTI_SEGMENTS,
-    LEGACY_FRAMES,
     METRIC_DISTANCE,
     PROFILES,
     ErrorStatistics,
@@ -62,8 +61,7 @@ def test_rpe_defaults_to_100m_reference_pairs():
 
 
 def test_profiles_are_registered_with_explicit_settings():
-    assert set(PROFILES) == {"legacy_frames", "metric_distance", "kitti_segments"}
-    assert LEGACY_FRAMES.rpe == PairSelection(100, "frames", all_pairs=False, pairs_from="index")
+    assert set(PROFILES) == {"metric_distance", "kitti_segments"}
     assert METRIC_DISTANCE.rpe.interval_unit == "m"
     assert METRIC_DISTANCE.rpe.pairs_from == "reference"
     assert KITTI_SEGMENTS.segments == SegmentSelection(tuple(float(x) for x in range(100, 900, 100)), 10)
@@ -156,23 +154,27 @@ def test_ape_rotation_constant_offset_in_radians():
 # ---------------------------------------------------------------------------
 
 
-def test_legacy_frames_rpe_uses_consecutive_100_frame_pairs():
+# Consecutive 100-frame pairs selected by index: a frame-interval RPE.
+FRAMES_100 = PairSelection(interval=100, interval_unit="frames", all_pairs=False, pairs_from="index")
+
+
+def test_frame_interval_rpe_uses_consecutive_pairs():
     n = 451
     gt = _straight_line(n, step=1.0)
     est = _straight_line(n, step=1.1)  # 10% scale error -> 10 m per 100-frame pair
-    result = compute_rpe(gt, est, LEGACY_FRAMES.rpe, "translation")
+    result = compute_rpe(gt, est, FRAMES_100, "translation")
     assert result.pairs == ((0, 100), (100, 200), (200, 300), (300, 400))
     assert result.num_pairs == 4
     assert result.frame_coverage == pytest.approx(400 / 450)
     assert result.statistics.rmse == pytest.approx(10.0, rel=1e-12)
-    assert compute_rpe(gt, est, LEGACY_FRAMES.rpe, "rotation").statistics.max == pytest.approx(0.0, abs=1e-12)
+    assert compute_rpe(gt, est, FRAMES_100, "rotation").statistics.max == pytest.approx(0.0, abs=1e-12)
 
 
-def test_legacy_frames_interval_is_frames_not_meters():
-    """At 2 m per frame, 100 frames span 200 m: the historical interval is not 100 m."""
+def test_frame_interval_is_not_a_distance():
+    """At 2 m per frame, 100 frames span 200 m, not 100 m."""
     gt = _straight_line(301, step=2.0)
     est = _straight_line(301, step=2.2)
-    frames = compute_rpe(gt, est, LEGACY_FRAMES.rpe, "translation")
+    frames = compute_rpe(gt, est, FRAMES_100, "translation")
     meters = compute_rpe(gt, est, METRIC_DISTANCE.rpe, "translation")
     assert frames.statistics.mean == pytest.approx(20.0, rel=1e-12)  # 10% of 200 m
     assert meters.errors[0] == pytest.approx(10.0, rel=1e-12)  # 10% of 100 m
@@ -204,14 +206,14 @@ def test_rpe_rotation_known_yaw_drift():
     est = gt.copy()
     for i in range(n):
         est[i, :3, :3] = _rot_y(i * d)
-    result = compute_rpe(gt, est, LEGACY_FRAMES.rpe, "rotation")
+    result = compute_rpe(gt, est, FRAMES_100, "rotation")
     assert result.unit == "rad"
     assert result.statistics.mean == pytest.approx(100 * d, rel=1e-9)
 
 
 def test_rpe_without_eligible_pairs_is_unavailable_with_reason():
     gt = _straight_line(50, step=1.0)  # 49 m and 49 frame intervals
-    for selection in (LEGACY_FRAMES.rpe, METRIC_DISTANCE.rpe):
+    for selection in (FRAMES_100, METRIC_DISTANCE.rpe):
         result = compute_rpe(gt, gt, selection)
         assert not result.available
         assert result.statistics is None
@@ -286,7 +288,7 @@ def test_length_mismatch_is_rejected_not_truncated():
     gt = _straight_line(300)
     est = _straight_line(299)
     with pytest.raises(TrajectoryInputError, match="length mismatch.*nothing is truncated"):
-        evaluate(gt, est, "legacy_frames")
+        evaluate(gt, est, "metric_distance")
 
 
 def test_nonfinite_estimate_is_rejected():
