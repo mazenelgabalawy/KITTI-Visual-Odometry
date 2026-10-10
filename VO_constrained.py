@@ -25,7 +25,7 @@ if __name__ == "__main__":
     max_per_grid = config['max_per_grid']
     min_depth_multiplier = config['min_depth_multiplier']  # For min_depth = min_depth_multiplier * base_line
     max_translation = config['max_translation']
-    max_pitch_deg = config['max_pitch_deg']  # Renamed for clarity, since it's used for pitch
+    max_pitch_deg = config['max_pitch_deg']  # Limits the rotation about the camera y axis (heading change), not pitch
     matching_norm = getattr(cv2, config['matching_norm'])  # Convert string to cv2 constant, e.g., 'NORM_HAMMING'
     temporal_inlier_threshold = config['temporal_inlier_threshold']
     temporal_cross_check = config['temporal_cross_check']
@@ -208,12 +208,14 @@ if __name__ == "__main__":
             R_cam = R_ortho.T
             t_cam = -R_ortho.T @ t_curr
             
+            # Euler angles about the camera x, y, z axes. With x right, y down, z forward, the second
+            # angle (named pitch here) is the rotation about y, i.e. the vehicle's heading change
             roll, pitch, yaw = rotationMatrixToEulerAngles(R_cam)
             
                         
-            # Check if the translation or pitch is too large
+            # Check if the translation or the heading change is too large
             if np.linalg.norm(t_cam) > max_translation or abs(pitch) > np.deg2rad(max_pitch_deg):
-                print(f"Frame {k}: Translation too large ({np.linalg.norm(t_cam):.2f} m) or pitch too large ({np.rad2deg(pitch):.2f} degrees). Skipping frame.")
+                print(f"Frame {k}: Translation too large ({np.linalg.norm(t_cam):.2f} m) or heading change too large ({np.rad2deg(pitch):.2f} degrees). Skipping frame.")
                 
                 # Skip this frame
                 left_prev = left_curr
