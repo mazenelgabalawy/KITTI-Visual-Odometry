@@ -79,6 +79,9 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
                              max_hamming_distance=30, ratio_test=0.7, max_disparity=64.0, min_disparity=1.0):
     """
     Match features between two rectified stereo images with epipolar constraint.
+    The candidates of a keypoint are the keypoints within the row band and the disparity range;
+    the best match is the candidate with the smallest Hamming distance. With two or more candidates,
+    the best must also pass the ratio test against the second-best candidate.
     Args:
         - feat_left: List of cv2.KeyPoint from the left image.
         - desc_left: np.array (n_left, 32) of uint8 ORB descriptors from left.
@@ -119,13 +122,18 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         desc_train_subset = desc_right_sorted[low:high]  # (c, 32)
         feat_train_subset = feat_right_sorted[low:high]
 
+        # Disparity check before ranking: only keypoints within the disparity range are candidates
+        u_query = kp_query.pt[0]
+        u_train = np.array([kp.pt[0] for kp in feat_train_subset])
+        disparity = u_query - u_train
+        candidates = np.flatnonzero((disparity >= min_disparity) & (disparity <= max_disparity))
+        if len(candidates) == 0:
+            continue
+
         # Vectorized Hamming distance using LUT
-        xor = desc_query ^ desc_train_subset  # (c, 32) uint8
+        xor = desc_query ^ desc_train_subset[candidates]  # (c, 32) uint8
         bit_counts = popcount[xor]  # (c, 32) int
         dists = np.sum(bit_counts, axis=1)  # (c,)
-
-        if len(dists) == 0:
-            continue
 
         min_idx = np.argmin(dists)
         min_dist = dists[min_idx]
@@ -141,15 +149,8 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
                 continue
         # For len==1, no ratio, but already checked max_dist
 
-        # Disparity check
-        u_query = kp_query.pt[0]
-        u_train = feat_train_subset[min_idx].pt[0]
-        disparity = u_query - u_train
-        if disparity < min_disparity or disparity > max_disparity:
-            continue
-
         # Match with original train idx (fix: cast min_dist to float for cv2.DMatch)
-        train_idx_original = idx_right_sorted[low + min_idx]
+        train_idx_original = idx_right_sorted[low + candidates[min_idx]]
         match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
         l2r_matches.append(match)
 
@@ -176,13 +177,18 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
         desc_train_subset = desc_left_sorted[low:high]
         feat_train_subset = feat_left_sorted[low:high]
 
+        # Disparity check before ranking (reversed for r2l)
+        u_query = kp_query.pt[0]
+        u_train = np.array([kp.pt[0] for kp in feat_train_subset])
+        disparity = u_train - u_query
+        candidates = np.flatnonzero((disparity >= min_disparity) & (disparity <= max_disparity))
+        if len(candidates) == 0:
+            continue
+
         # Vectorized Hamming distance using LUT (optimized)
-        xor = desc_query ^ desc_train_subset
+        xor = desc_query ^ desc_train_subset[candidates]
         bit_counts = popcount[xor]
         dists = np.sum(bit_counts, axis=1)
-
-        if len(dists) == 0:
-            continue
 
         min_idx = np.argmin(dists)
         min_dist = dists[min_idx]
@@ -196,14 +202,8 @@ def rectified_stereo_matcher(feat_left, desc_left, feat_right, desc_right, cross
             if min_dist / (second_dist + 1e-9) >= ratio_test:
                 continue
 
-        u_query = kp_query.pt[0]
-        u_train = feat_train_subset[min_idx].pt[0]
-        disparity = u_train - u_query  # Reversed for r2l
-        if disparity < min_disparity or disparity > max_disparity:
-            continue
-
         # Match with original train idx (left) (fix: cast min_dist to float for cv2.DMatch)
-        train_idx_original = idx_left_sorted[low + min_idx]
+        train_idx_original = idx_left_sorted[low + candidates[min_idx]]
         match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
         r2l_matches.append(match)
 
