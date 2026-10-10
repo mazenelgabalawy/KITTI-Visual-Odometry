@@ -99,7 +99,10 @@ def test_pnp_too_few_points_fails():
     assert result.inliers is None
 
 
-def test_depth_filter_matches_legacy_expression():
+def test_depth_filter_specification():
+    """Kept iff z > min_depth_multiplier * b and sigma_z / z < tau, with
+    sigma_z = z**2 / (f * b) the stereo depth standard deviation for 1 px of
+    disparity error."""
     calib = StereoCalibration.from_projection_matrices(P0, P1)
 
     rng = np.random.default_rng(3)
@@ -113,11 +116,11 @@ def test_depth_filter_matches_legacy_expression():
     landmark_filter = DepthUncertaintyFilter(cfg)
     actual_mask = landmark_filter.valid_mask(points_3d, calib)
 
-    # Golden formula copied verbatim from VO_constrained.py L123-128.
-    legacy_depths = points_3d[:, 2]
-    sigma_z = np.square(legacy_depths) / (calib.focal_length * calib.baseline)
-    expected_mask = legacy_depths > cfg.min_depth_multiplier * calib.baseline
-    expected_mask = expected_mask & (sigma_z / legacy_depths < cfg.relative_depth_uncertainty_threshold)
+    z = points_3d[:, 2]
+    sigma_z = z**2 / (calib.focal_length * calib.baseline)
+    expected_mask = (z > cfg.min_depth_multiplier * calib.baseline) & (
+        sigma_z / z < cfg.relative_depth_uncertainty_threshold
+    )
 
     np.testing.assert_array_equal(actual_mask, expected_mask)
 

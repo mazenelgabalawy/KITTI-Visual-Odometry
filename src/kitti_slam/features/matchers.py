@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import bisect
-
 import cv2
 import numpy as np
 
@@ -61,140 +59,6 @@ class RectifiedStereoMatcher(Matcher):
     def __init__(self, cfg: StereoMatcherConfig):
         self.cfg = cfg
 
-    def _match_reference(self, feat_a: Features, feat_b: Features) -> list:
-        feat_left = feat_a.keypoints
-        desc_left = feat_a.descriptors
-        feat_right = feat_b.keypoints
-        desc_right = feat_b.descriptors
-        cross_check = self.cfg.cross_check
-        pixel_threshold = self.cfg.pixel_threshold
-        max_hamming_distance = self.cfg.max_hamming_distance
-        ratio_test = self.cfg.ratio_test
-        max_disparity = self.cfg.max_disparity
-        min_disparity = 1.0
-
-        if len(feat_left) == 0 or len(feat_right) == 0:
-            return []
-
-        # Precompute popcount LUT for fast Hamming distance
-        popcount = np.array([bin(i).count("1") for i in range(256)], dtype=int)
-
-        # Pre-sort right keypoints by y for l2r
-        y_right = np.array([kp.pt[1] for kp in feat_right])
-        idx_right_sorted = np.argsort(y_right)
-        y_right_sorted = y_right[idx_right_sorted]
-        feat_right_sorted = np.array(feat_right)[idx_right_sorted]
-        desc_right_sorted = desc_right[idx_right_sorted]
-
-        # Left-to-right matches
-        l2r_matches = []
-        for query_idx, kp_query in enumerate(feat_left):
-            desc_query = desc_left[query_idx].reshape(1, -1)  # (1, 32)
-            row = kp_query.pt[1]
-            low = bisect.bisect_left(y_right_sorted, row - pixel_threshold)
-            high = bisect.bisect_right(y_right_sorted, row + pixel_threshold)
-            if low == high:
-                continue
-
-            desc_train_subset = desc_right_sorted[low:high]  # (c, 32)
-            feat_train_subset = feat_right_sorted[low:high]
-
-            # Vectorized Hamming distance using LUT
-            xor = desc_query ^ desc_train_subset  # (c, 32) uint8
-            bit_counts = popcount[xor]  # (c, 32) int
-            dists = np.sum(bit_counts, axis=1)  # (c,)
-
-            if len(dists) == 0:
-                continue
-
-            min_idx = np.argmin(dists)
-            min_dist = dists[min_idx]
-
-            if min_dist > max_hamming_distance:
-                continue
-
-            # Ratio test if >=2 candidates
-            if len(dists) >= 2:
-                dists_sorted = np.partition(dists, 1)
-                second_dist = dists_sorted[1]
-                if min_dist / (second_dist + 1e-9) >= ratio_test:
-                    continue
-            # For len==1, no ratio, but already checked max_dist
-
-            # Disparity check
-            u_query = kp_query.pt[0]
-            u_train = feat_train_subset[min_idx].pt[0]
-            disparity = u_query - u_train
-            if disparity < min_disparity or disparity > max_disparity:
-                continue
-
-            # Match with original train idx (fix: cast min_dist to float for cv2.DMatch)
-            train_idx_original = idx_right_sorted[low + min_idx]
-            match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
-            l2r_matches.append(match)
-
-        if not cross_check:
-            return l2r_matches
-
-        # Pre-sort left for r2l
-        y_left = np.array([kp.pt[1] for kp in feat_left])
-        idx_left_sorted = np.argsort(y_left)
-        y_left_sorted = y_left[idx_left_sorted]
-        feat_left_sorted = np.array(feat_left)[idx_left_sorted]
-        desc_left_sorted = desc_left[idx_left_sorted]
-
-        # Right-to-left matches
-        r2l_matches = []
-        for query_idx, kp_query in enumerate(feat_right):
-            desc_query = desc_right[query_idx].reshape(1, -1)
-            row = kp_query.pt[1]
-            low = bisect.bisect_left(y_left_sorted, row - pixel_threshold)
-            high = bisect.bisect_right(y_left_sorted, row + pixel_threshold)
-            if low == high:
-                continue
-
-            desc_train_subset = desc_left_sorted[low:high]
-            feat_train_subset = feat_left_sorted[low:high]
-
-            # Vectorized Hamming distance using LUT (optimized)
-            xor = desc_query ^ desc_train_subset
-            bit_counts = popcount[xor]
-            dists = np.sum(bit_counts, axis=1)
-
-            if len(dists) == 0:
-                continue
-
-            min_idx = np.argmin(dists)
-            min_dist = dists[min_idx]
-
-            if min_dist > max_hamming_distance:
-                continue
-
-            if len(dists) >= 2:
-                dists_sorted = np.partition(dists, 1)
-                second_dist = dists_sorted[1]
-                if min_dist / (second_dist + 1e-9) >= ratio_test:
-                    continue
-
-            u_query = kp_query.pt[0]
-            u_train = feat_train_subset[min_idx].pt[0]
-            disparity = u_train - u_query  # Reversed for r2l
-            if disparity < min_disparity or disparity > max_disparity:
-                continue
-
-            # Match with original train idx (left) (fix: cast min_dist to float for cv2.DMatch)
-            train_idx_original = idx_left_sorted[low + min_idx]
-            match = cv2.DMatch(_queryIdx=query_idx, _trainIdx=train_idx_original, _distance=float(min_dist))
-            r2l_matches.append(match)
-
-        # Mutual best matches (cross-check)
-        r2l_backpointer = {m.queryIdx: m.trainIdx for m in r2l_matches}  # right -> left
-        mutual_matches = [
-            m for m in l2r_matches if m.trainIdx in r2l_backpointer and r2l_backpointer[m.trainIdx] == m.queryIdx
-        ]
-
-        return mutual_matches
-
     # Precomputed once at import time: popcount[b] = number of set bits in byte b.
     _POPCOUNT_LUT = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
 
@@ -214,9 +78,10 @@ class RectifiedStereoMatcher(Matcher):
     ) -> list:
         """Vectorized one-directional epipolar-constrained matching pass.
 
-        Reproduces the per-keypoint loop in ``_match_reference`` exactly: same
-        tie-breaks (first-occurrence argmin via sentinel masking + stable
-        argsort), same ratio-test gating, same disparity inequality directions.
+        Matches the per-keypoint specification in
+        tests/unit/test_matcher_vectorization.py exactly: same tie-breaks
+        (first-occurrence argmin via sentinel masking + stable argsort), same
+        ratio-test gating, same disparity inequality directions.
 
         Instead of computing a dense (n_query, n_train) Hamming distance matrix
         (which wastes work: the true epipolar bands are typically tiny relative to
