@@ -35,8 +35,7 @@ its 100 m reference-selected pairs. A frame interval can still be passed to
 Notes:
 
 - **Seminar numbers.** The seminar report's RPE values use a 100-frame
-  interval, not 100 m (see its errata on the `legacy` branch); they are not
-  comparable with `metric_distance`.
+  interval, not 100 m; they are not comparable with `metric_distance`.
 - **Reference-selected pairs.** Choosing 100 m pairs on the *estimate's* path
   (evo's `pairs_from_reference=False`) would score two estimates on different
   pairs, and an estimate with a wrong scale on a different stretch of road.

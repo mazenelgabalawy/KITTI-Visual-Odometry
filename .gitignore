@@ -14,3 +14,11 @@ sequences
 .bench/
 build/
 dist/
+*.pyc
+# Assistant instructions, plans, reports, and audits are never committed
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+docs/plan/
+docs/reports/
+docs/audit/

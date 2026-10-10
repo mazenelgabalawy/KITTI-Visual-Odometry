@@ -120,8 +120,7 @@ Regression tests skip, rather than pass, when their data is missing.
 ## Known issues
 
 This is a research package evaluated on KITTI. The defects that affected the
-estimates are corrected; the corrections and their measured effects are listed in
-[docs/capabilities.md](docs/capabilities.md) §4.
+estimates are corrected.
 
 Known limitations, not fixed because they do not affect KITTI estimates:
 
@@ -133,7 +132,7 @@ Known limitations, not fixed because they do not affect KITTI estimates:
 ## Seminar code
 
 The package began as the seminar code `VO_base.py` / `VO_constrained.py`. That
-code, its results, figures, and report (`VO_Seminar.pdf`, with an errata) are on
+code, its results, figures, and report (`VO_Seminar.pdf`) are on
 the [`legacy`](https://github.com/mazenelgabalawy/KITTI-Visual-Odometry/tree/legacy) branch, with the same corrections as the
 package applied. With the same parameters, the `legacy` scripts and this package
 produce byte-identical trajectories on all 11 labeled sequences in both

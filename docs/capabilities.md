@@ -5,15 +5,15 @@ recorded check passed.
 
 The package began as a port of the seminar scripts and reproduced their
 trajectories byte for byte on all 11 labeled sequences in both configurations.
-The corrections in §4 were applied to both; the seminar scripts, corrected, are on
+Later corrections were applied to both; the seminar scripts, corrected, are on
 the `legacy` branch and still produce byte-identical trajectories.
 
 ## 1. Capability status
 
 | Capability | Status | Entry point |
 |---|---|---|
-| Stereo VO, `base` configuration | Implemented; validated on all 11 labeled sequences (§4) | `scripts/run_vo.py --config configs/base.yaml` |
-| Stereo VO, `constrained` configuration | Implemented; validated on all 11 labeled sequences (§4) | `scripts/run_vo.py --config configs/constrained.yaml` |
+| Stereo VO, `base` configuration | Implemented; validated on all 11 labeled sequences | `scripts/run_vo.py --config configs/base.yaml` |
+| Stereo VO, `constrained` configuration | Implemented; validated on all 11 labeled sequences | `scripts/run_vo.py --config configs/constrained.yaml` |
 | Trajectory evaluation, SI units: `metric_distance` (100 m RPE) and `kitti_segments` | Implemented; checked against closed-form synthetic trajectories | `scripts/evaluate.py` |
 | Feature/match figures (keypoints, grid selection, BF vs. rectified stereo, temporal, ORB vs. SIFT) | Implemented | `scripts/visualize_features.py` |
 | Per-stage timing | Implemented (opt-in) | `run_vo.py --timing` |
@@ -64,30 +64,3 @@ motion: constant velocity, in every configuration.
   including through symlinks at any level (`kitti_slam.protected_paths`).
 - **Metrics:** `evaluate.py` writes `<XX>/metrics/<profile>.{json,txt}` and,
   with `--plots`, `<XX>/plots/*.png`. Definitions: [evaluation.md](evaluation.md).
-
-## 4. Corrections (Phase B)
-
-Each correction is its own commit with tests. Effects are measured on all 11
-labeled sequences × 2 configurations against the package before the correction,
-with the default profiles (`metric_distance`, `kitti_segments`) in SI units.
-
-| ID | Before | Corrected behavior | Measured effect on KITTI |
-|---|---|---|---|
-| BUG-013 | A failed registration held the pose in base (zero velocity) and repeated the last relative motion in constrained (`interpolate_on_skip`) | Every failed registration (no correspondences, too few points, failed or rejected PnP, implausible motion) propagates the last accepted relative transform: constant velocity, in both configurations. Propagation does not change the transform, and the next registration starts from the current frame | None on the shipped configs: no registration failed on any sequence before this change, so all 22 trajectories are byte-identical |
-| BUG-003 | Every triangulated point reached PnP, including points behind the cameras and points with near-zero homogeneous `w` (zero disparity, z up to 1e25 m) | One validity check in both configurations: finite coordinates, positive depth in both cameras, `\|w\|` ≥ `triangulation.min_abs_w` | Base only (all 11 base trajectories change, no constrained one): it rejects 2.8% (seq 04) to 20.1% (seq 01) of associated points; on seq 01, 11.3% are behind the cameras and 8.7% lie beyond 10 km. APE improves on 7 of 11 sequences (seq 01: 522.8 → 417.8 m; seq 06: 14.71 → 8.85 m) and worsens on 4 (largest: seq 08, 101.4 → 112.4 m). Constrained is unchanged: its matcher bounds disparity to [1, 64] px |
-| BUG-002 | The `solvePnPRansac` return value was ignored and its outputs were composed into the trajectory unchecked | A solve is accepted only if the solver succeeds, its rotation and translation are finite, and it has at least `pnp.min_inliers` inliers; otherwise it is a failed registration (BUG-013). The inliers are kept on the estimate | The solver never failed and no output was nonfinite. One frame on all of KITTI had fewer than 6 inliers: constrained seq 01 frame 435 (5 inliers of 8 landmarks), propagated by this correction; after BUG-005 the frame has 7 inliers and registers |
-| BUG-006 | Grid cell indices were clipped to `size // cell − 1`, so the partial bottom row and right column at the image remainder shared a cell (and its `max_per_grid` cap) with their neighbours | Cell counts round up: the remainder row and column are cells of their own. The response tie order is kept | None on the shipped configs: ORB's 31 px border keeps every keypoint at least 32 px from the right and bottom edges, while the remainder strips are 11–26 px wide, so no keypoint ever fell in a merged cell. Grids whose remainder is wider than the border (for example 100 px rows) are affected |
-| BUG-005 | The rectified matcher chose the best and second-best descriptor among all keypoints in the row band, then rejected the best if its disparity was outside [1, `max_disparity`] px. A closer descriptor with impossible geometry suppressed a valid match, and entered the ratio test | Only candidates inside the row band **and** the disparity range compete for best and second-best; the ratio test compares valid candidates only; cross-check keeps mutual best matches under the same rule | Matches are only added, never removed: +0.4% (seq 04), +0.6% (seq 00), +5.7% (seq 01) stereo matches. On highway seq 01 the added matches are mostly far (median disparity 1.8 px, 79% below 4 px) and less distinctive; rotation error falls and translation error rises there: APE 345.7 → 365.0 m, segment drift 0.214 → 0.231 m/m and 2.44e-4 → 2.32e-4 rad/m. Over the 11 constrained sequences APE changes by −0.9 to +1.2 m except seq 01, improving on 4 and worsening on 7 |
-| BUG-004 | The base (brute-force) stereo matcher was built with `temporal_matcher.cross_check`; `stereo_matcher.cross_check` was ignored | The stereo matcher uses `stereo_matcher.cross_check` | None on the shipped configs, which set both to `true`; experiments that vary the stereo setting now get it |
-
-Net effect of all corrections (before → after all corrections), number of
-sequences out of 11 where each metric improved / worsened:
-
-| Configuration | APE t (m) | RPE t, 100 m (m) | RPE r, 100 m (rad) | Segment t (m/m) | Segment r (rad/m) |
-|---|---|---|---|---|---|
-| base | 7 / 4 | 7 / 4 | 6 / 5 | 8 / 3 | 5 / 6 |
-| constrained | 4 / 7 | 4 / 7 | 5 / 6 | 5 / 6 | 6 / 5 |
-
-A correction is kept because it removes a defect, not because it lowers
-average error; the regressions above are reported, not hidden. No
-registration failed on any sequence after the corrections.
