@@ -55,7 +55,6 @@ class MotionConfig:
     max_translation: float | None = None
     max_pitch_deg: float | None = None
     orthogonalize_alpha: float | None = None
-    interpolate_on_skip: bool = False
 
 
 @dataclass(frozen=True)

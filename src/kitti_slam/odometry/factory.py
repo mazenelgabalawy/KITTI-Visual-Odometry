@@ -56,5 +56,4 @@ def build_pipeline(cfg: PipelineConfig) -> StereoVOPipeline:
         landmark_filter=landmark_filter,
         pose_estimator=pose_estimator,
         motion_filter=motion_filter,
-        interpolate_on_skip=motion_cfg.interpolate_on_skip,
     )

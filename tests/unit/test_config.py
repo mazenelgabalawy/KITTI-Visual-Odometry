@@ -3,7 +3,7 @@ import dataclasses
 import pytest
 
 from kitti_slam.config import ConfigError, load_config
-from kitti_slam.config.schema import PipelineConfig
+from kitti_slam.config.schema import MotionConfig, PipelineConfig
 
 
 def test_load_base_yaml_roundtrip(repo_root):
@@ -25,7 +25,7 @@ def test_load_base_yaml_roundtrip(repo_root):
     assert cfg.pnp.confidence == 0.99
     assert cfg.pnp.iterations_count == 100
     assert cfg.pnp.seed == 42
-    assert cfg.motion.interpolate_on_skip is False
+    assert cfg.motion == MotionConfig()
     assert cfg.grid_filter is None
     assert cfg.landmark_filter is None
 
@@ -50,7 +50,6 @@ def test_load_constrained_yaml_roundtrip(repo_root):
     assert cfg.motion.max_translation == 15.0
     assert cfg.motion.max_pitch_deg == 30
     assert cfg.motion.orthogonalize_alpha == 0.8
-    assert cfg.motion.interpolate_on_skip is True
 
 
 def test_unknown_key_raises(tmp_path):

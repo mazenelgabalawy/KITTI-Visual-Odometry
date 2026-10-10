@@ -8,18 +8,19 @@ from __future__ import annotations
 import importlib.util
 import sys
 
+import cv2
 import numpy as np
 import pytest
 
-from kitti_slam.config import load_config
-from kitti_slam.config.schema import MotionConfig, PnPConfig
+from kitti_slam.config import ConfigError, load_config
+from kitti_slam.config.schema import PnPConfig
 from kitti_slam.datasets.base import StereoFrame, StereoSequence
 from kitti_slam.features.base import FeatureDetector, Features, Matcher
 from kitti_slam.features.grid_filter import GridKeypointFilter
 from kitti_slam.features.matchers import BruteForceMatcher, RectifiedStereoMatcher
 from kitti_slam.features.orb import OrbDetector
 from kitti_slam.geometry.calibration import StereoCalibration
-from kitti_slam.odometry.base import PoseEstimate, PoseEstimator
+from kitti_slam.odometry.base import LandmarkFilter, MotionFilter, PoseEstimate, PoseEstimator
 from kitti_slam.odometry.factory import build_pipeline
 from kitti_slam.odometry.motion_filters import NullMotionFilter, PlanarMotionFilter
 from kitti_slam.odometry.pipeline import StereoVOPipeline
@@ -43,7 +44,6 @@ def test_factory_base_variant(repo_root):
     assert isinstance(pipeline.motion_filter, NullMotionFilter)
     assert pipeline.landmark_filter is None
     assert isinstance(pipeline.pose_estimator, PnPRansacEstimator)
-    assert pipeline.interpolate_on_skip is False
 
 
 def test_factory_constrained_variant(repo_root):
@@ -57,7 +57,6 @@ def test_factory_constrained_variant(repo_root):
     assert isinstance(pipeline.stereo_matcher, RectifiedStereoMatcher)
     assert isinstance(pipeline.motion_filter, PlanarMotionFilter)
     assert isinstance(pipeline.landmark_filter, DepthUncertaintyFilter)
-    assert pipeline.interpolate_on_skip is True
 
 
 # ---------------------------------------------------------------------------
@@ -191,44 +190,140 @@ def _make_trivial_sequence(n_frames: int = 4) -> InMemoryStereoSequence:
     return InMemoryStereoSequence(frames, calib)
 
 
-def test_skip_policy():
-    sequence = _make_trivial_sequence(n_frames=4)
+_N_SCRIPTED = 8
 
-    base_pipeline = StereoVOPipeline(
-        detector=_EmptyDetector(),
-        temporal_matcher=_EmptyMatcher(),
-        stereo_matcher=_EmptyMatcher(),
+
+class _StereoPairDetector(FeatureDetector):
+    """The same 8 keypoints in every left image; the right image sees them 10 px
+    to the left (disparity 10 px, about 38 m deep with the trivial calibration)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def detect(self, image: np.ndarray) -> Features:
+        shift = 10.0 if self.calls % 2 else 0.0  # the pipeline detects left, then right
+        self.calls += 1
+        kps = [cv2.KeyPoint(x=100.0 + 20.0 * i - shift, y=60.0 + 15.0 * i, size=5.0) for i in range(_N_SCRIPTED)]
+        return Features(kps, np.arange(_N_SCRIPTED * 32, dtype=np.uint8).reshape(_N_SCRIPTED, 32))
+
+
+class _IdentityMatcher(Matcher):
+    """Matches i -> i, except on the listed (1-based) calls, where it returns nothing."""
+
+    def __init__(self, empty_calls=()):
+        self.calls, self.empty_calls = 0, set(empty_calls)
+
+    def match(self, feat_a: Features, feat_b: Features) -> list:
+        self.calls += 1
+        if self.calls in self.empty_calls:
+            return []
+        return [cv2.DMatch(_queryIdx=i, _trainIdx=i, _distance=0.0) for i in range(_N_SCRIPTED)]
+
+
+class _RejectingLandmarkFilter(LandmarkFilter):
+    def __init__(self, reject_calls=()):
+        self.calls, self.reject_calls = 0, set(reject_calls)
+
+    def valid_mask(self, points_3d, calib):
+        self.calls += 1
+        return np.full(len(points_3d), self.calls not in self.reject_calls)
+
+
+class _RejectingMotionFilter(MotionFilter):
+    def __init__(self, reject_calls=()):
+        self.calls, self.reject_calls = 0, set(reject_calls)
+
+    def refine_rotation(self, R):
+        return R
+
+    def is_plausible(self, R_world, t_world):
+        self.calls += 1
+        return self.calls not in self.reject_calls
+
+
+class _ScriptedEstimator(PoseEstimator):
+    """Returns the scripted camera-frame translation per call (identity rotation);
+    None scripts a failed solve."""
+
+    def __init__(self, script):
+        self.script, self.calls = list(script), 0
+
+    def estimate(self, points_3d, points_2d, K) -> PoseEstimate:
+        t = self.script[self.calls]
+        self.calls += 1
+        if t is None:
+            return PoseEstimate(R=None, t=None, inliers=None, success=False, retval=False)
+        inliers = np.arange(len(points_3d)).reshape(-1, 1)
+        return PoseEstimate(R=np.eye(3), t=np.asarray(t, dtype=float), inliers=inliers, success=True, retval=True)
+
+
+# Camera-frame PnP translations: (0, 0, -1) moves the camera 1 m forward in the
+# world, (-2, 0, 0) moves it 2 m along world x.
+_FORWARD = (0.0, 0.0, -1.0)
+_SIDEWAYS = (-2.0, 0.0, 0.0)
+_IMPLAUSIBLE = (0.0, 0.0, -50.0)
+
+
+def _scripted_pipeline(kind: str) -> StereoVOPipeline:
+    """Frame 1 registers 1 m forward, frames 2-3 fail in the given way, frame 4
+    registers 2 m sideways."""
+    fail = {2, 3}
+    temporal = _IdentityMatcher(empty_calls=fail if kind == "no_correspondences" else ())
+    landmarks = _RejectingLandmarkFilter(reject_calls=fail if kind == "too_few_points" else ())
+    motion = _RejectingMotionFilter(reject_calls=fail if kind == "implausible_motion" else ())
+    script = {
+        "no_correspondences": [_FORWARD, _SIDEWAYS],
+        "too_few_points": [_FORWARD, _SIDEWAYS],
+        "pnp_failed": [_FORWARD, None, None, _SIDEWAYS],
+        "implausible_motion": [_FORWARD, _IMPLAUSIBLE, _IMPLAUSIBLE, _SIDEWAYS],
+    }[kind]
+    return StereoVOPipeline(
+        detector=_StereoPairDetector(),
+        temporal_matcher=temporal,
+        stereo_matcher=_IdentityMatcher(),
+        landmark_filter=landmarks,
+        pose_estimator=_ScriptedEstimator(script),
+        motion_filter=motion,
+    )
+
+
+@pytest.mark.parametrize("kind", ["no_correspondences", "too_few_points", "pnp_failed", "implausible_motion"])
+def test_failed_registration_propagates_constant_velocity(kind):
+    from kitti_slam.odometry.diagnostics import FrameDiagnostics
+
+    diagnostics = FrameDiagnostics()
+    poses = _scripted_pipeline(kind).run(_make_trivial_sequence(n_frames=5), progress=False, diagnostics=diagnostics)
+
+    assert [r["outcome"] for r in diagnostics.rows] == ["registered", kind, kind, "registered"]
+    assert [r["consecutive_failures"] for r in diagnostics.rows] == [0, 1, 2, 0]
+    for pose in poses:
+        np.testing.assert_allclose(pose[:, :3], np.eye(3), atol=1e-12)
+    # Frames 2-3 repeat frame 1's 1 m forward step; frame 4's success replaces it.
+    np.testing.assert_allclose(poses[:, :, 3], [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3], [2, 0, 3]], atol=1e-12)
+
+
+def test_failure_before_first_success_holds_identity():
+    pipeline = StereoVOPipeline(
+        detector=_StereoPairDetector(),
+        temporal_matcher=_IdentityMatcher(),
+        stereo_matcher=_IdentityMatcher(),
         landmark_filter=None,
-        pose_estimator=_AlwaysFailEstimator(),
+        pose_estimator=_ScriptedEstimator([None, None, _FORWARD]),
         motion_filter=NullMotionFilter(),
-        interpolate_on_skip=False,
     )
-    base_poses = base_pipeline.run(sequence, progress=False)
+    poses = pipeline.run(_make_trivial_sequence(n_frames=4), progress=False)
+    np.testing.assert_allclose(poses[:, :, 3], [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 1]], atol=1e-12)
 
-    assert base_poses.shape == (4, 3, 4)
-    for pose in base_poses:
-        np.testing.assert_allclose(pose, np.eye(3, 4), atol=1e-12)
 
-    constrained_pipeline = StereoVOPipeline(
-        detector=_EmptyDetector(),
-        temporal_matcher=_EmptyMatcher(),
-        stereo_matcher=_EmptyMatcher(),
-        landmark_filter=None,
-        pose_estimator=_AlwaysFailEstimator(),
-        motion_filter=PlanarMotionFilter(
-            MotionConfig(max_translation=15.0, max_pitch_deg=30.0, orthogonalize_alpha=0.8, interpolate_on_skip=True)
-        ),
-        interpolate_on_skip=True,
+def test_interpolate_on_skip_is_not_a_config_key(repo_root, tmp_path):
+    old = tmp_path / "old.yaml"
+    old.write_text(
+        (repo_root / "configs" / "constrained.yaml")
+        .read_text()
+        .replace("orthogonalize_alpha: 0.8\n", "orthogonalize_alpha: 0.8\n  interpolate_on_skip: true\n")
     )
-    constrained_poses = constrained_pipeline.run(sequence, progress=False)
-
-    assert constrained_poses.shape == (4, 3, 4)
-    # T_prev starts at identity and is never updated (no successful frame ever
-    # happens), so interpolating C_k @ homogeneous(identity) leaves C_k unchanged.
-    for pose in constrained_poses:
-        np.testing.assert_allclose(pose, np.eye(3, 4), atol=1e-12)
-
-    np.testing.assert_allclose(base_poses, constrained_poses, atol=1e-12)
+    with pytest.raises(ConfigError, match="interpolate_on_skip"):
+        load_config(old)
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +392,6 @@ def test_diagnostics_record_failures_and_streaks(tmp_path):
         landmark_filter=None,
         pose_estimator=_AlwaysFailEstimator(),
         motion_filter=NullMotionFilter(),
-        interpolate_on_skip=False,
     )
     diagnostics = FrameDiagnostics()
     pipeline.run(_make_trivial_sequence(n_frames=4), progress=False, diagnostics=diagnostics)

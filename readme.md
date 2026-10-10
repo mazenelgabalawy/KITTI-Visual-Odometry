@@ -120,8 +120,9 @@ Regression tests skip, rather than pass, when their data is missing.
 
 ## Known issues
 
-This is a research package evaluated on KITTI. The next phase fixes only defects
-that affect the estimates:
+This is a research package evaluated on KITTI. The current phase fixes only defects
+that affect the estimates; corrections already made are listed in
+[docs/compatibility.md](docs/compatibility.md) §4b. Still open:
 
 - Triangulated points are not validated. The base configuration passes points with
   non-positive depth to PnP (BUG-003).
@@ -130,9 +131,6 @@ that affect the estimates:
 - The rectified stereo matcher picks the best descriptor before checking its geometry (BUG-005).
 - `stereo_matcher.cross_check` is ignored for the base (brute-force) stereo
   matcher, which uses the temporal value instead (BUG-004).
-- On a failed registration, the base configuration holds the previous pose and the
-  constrained configuration repeats the last motion (`motion.interpolate_on_skip`).
-  Both will assume constant velocity (BUG-013).
 
 Known limitations, not planned because they do not affect KITTI estimates:
 

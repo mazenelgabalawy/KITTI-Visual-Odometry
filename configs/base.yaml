@@ -21,5 +21,6 @@ pnp:
   iterations_count: 100
   seed: 42
 
-motion:
-  interpolate_on_skip: false
+# No planar refinement or plausibility gates. A failed registration propagates
+# the last accepted motion (constant velocity), as in every configuration.
+motion: {}

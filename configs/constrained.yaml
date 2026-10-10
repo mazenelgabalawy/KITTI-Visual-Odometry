@@ -38,4 +38,3 @@ motion:
   max_translation: 15.0
   max_pitch_deg: 30
   orthogonalize_alpha: 0.8
-  interpolate_on_skip: true

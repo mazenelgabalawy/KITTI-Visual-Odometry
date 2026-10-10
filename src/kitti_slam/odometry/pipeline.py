@@ -10,7 +10,6 @@ concrete components are plugged in:
   - landmark filter:  none (base) vs. DepthUncertaintyFilter (constrained)
   - motion filter:    NullMotionFilter (base, always plausible, no orthogonalization)
                       vs. PlanarMotionFilter (constrained)
-  - interpolate_on_skip: False (base) vs. True (constrained)
 
 StereoVOPipeline.step()/run() implement that single skeleton; base-vs-constrained
 behavior falls out purely from which components are injected (see factory.py),
@@ -32,23 +31,18 @@ Transcription notes (see also module docstrings on the components used here):
    pair each step — reproducing both variants' numerics at half the detection
    cost of redetecting prev every iteration.
 
-2. Two skip sites, both handled identically here (matching VO_constrained.py):
-   - Not enough triangulated/filtered points (VO_constrained.py L136-153,
-     VO_base.py L106-113): base has NO interpolation -- it just re-saves the
-     unchanged C_k. Constrained interpolates via C_k = C_k @ homogeneous(T_prev).
-   - Implausible motion (VO_constrained.py L173-191, base has no equivalent
-     check at all -- NullMotionFilter.is_plausible is always True so this branch
-     is simply never taken for the base variant).
-   Both skip sites, in both variants: prev image/features are advanced to
-   curr (so the next iteration compares curr vs. the *following* frame, not
-   re-comparing the same skipped frame), and T_prev is left untouched (it still
-   holds the last *successful* transform, since legacy only updates T_prev at
-   the bottom of the success path, L211).
+2. Failed registration assumes constant velocity (BUG-013). Every failure --
+   no correspondences, too few points, a failed or rejected PnP solve, or
+   implausible motion -- propagates C_k = C_{k-1} @ T_last, where T_last is the
+   last accepted relative transform (identity before the first). Propagation
+   does not change T_last, and prev image/features advance to curr, so the
+   next registration runs from frame k. Legacy base held the pose instead
+   (zero velocity); legacy constrained already repeated the last motion.
 3. The <4-points guard is checked exactly once, AFTER any landmark filtering
    (VO_constrained.py L136, VO_base.py L106 -- base has no landmark filter so
    there the check is trivially "right after triangulation").
 4. N==0 correspondences (intersect_temporal_stereo returns empty arrays rather
-   than raising, Module 3 change) are treated as an immediate skip rather than
+   than raising, Module 3 change) are a failed registration (note 2) rather than
    calling cv2.triangulatePoints with empty input.
 5. Motion gate operates on WORLD-frame R, t: refine_rotation() is applied to the
    camera-frame R from PnP *first* (VO_constrained.py L164), then invert_pose()
@@ -82,7 +76,7 @@ class FrameState:
     right_image: np.ndarray
     left_features: Features
     right_features: Features
-    T_prev: np.ndarray  # last successful 3x4 relative transform (for interpolation)
+    T_last: np.ndarray  # last accepted 3x4 relative transform (the constant-velocity model)
     C: np.ndarray  # accumulated 4x4 global pose
 
 
@@ -95,7 +89,6 @@ class StereoVOPipeline:
         landmark_filter: LandmarkFilter | None,
         pose_estimator: PoseEstimator,
         motion_filter: MotionFilter,
-        interpolate_on_skip: bool,
         min_points: int = 4,
     ) -> None:
         self.detector = detector
@@ -104,10 +97,9 @@ class StereoVOPipeline:
         self.landmark_filter = landmark_filter
         self.pose_estimator = pose_estimator
         self.motion_filter = motion_filter
-        self.interpolate_on_skip = interpolate_on_skip
         self.min_points = min_points
 
-    def _skip(
+    def _propagate(
         self,
         state: FrameState,
         left_curr_img,
@@ -117,19 +109,17 @@ class StereoVOPipeline:
         diag: dict | None = None,
         outcome: str = "",
     ) -> FrameState:
-        """Shared tail of both skip sites: advance prev <- curr, optionally
-        interpolate C_k via T_prev, leave T_prev untouched."""
+        """Failed registration (note 2): propagate C_k with the constant-velocity
+        model, advance prev <- curr, and leave T_last unchanged."""
         if diag is not None:
             diag["outcome"] = outcome
-        C = state.C
-        if self.interpolate_on_skip:
-            C = compose_se3(C, state.T_prev)
+        C = compose_se3(state.C, state.T_last)
         return FrameState(
             left_image=left_curr_img,
             right_image=right_curr_img,
             left_features=left_feat_curr,
             right_features=right_feat_curr,
-            T_prev=state.T_prev,
+            T_last=state.T_last,
             C=C,
         )
 
@@ -175,9 +165,9 @@ class StereoVOPipeline:
             diag["stereo_matches"] = len(stereo_matches_prev)
             diag["associated"] = corr.left_prev.shape[0]
 
-        # Note 4: N==0 correspondences -> immediate skip, no triangulation call.
+        # Note 4: N==0 correspondences -> failed registration, no triangulation call.
         if corr.left_prev.shape[0] == 0:
-            return self._skip(
+            return self._propagate(
                 state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "no_correspondences"
             )
 
@@ -200,7 +190,7 @@ class StereoVOPipeline:
 
         # Note 3: the <4 guard is checked once, after any landmark filtering.
         if points_3d.shape[0] < self.min_points:
-            return self._skip(
+            return self._propagate(
                 state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "too_few_points"
             )
 
@@ -210,7 +200,9 @@ class StereoVOPipeline:
             diag["pnp_retval"] = "" if estimate.retval is None else int(estimate.retval)
             diag["pnp_inliers"] = 0 if estimate.inliers is None else len(estimate.inliers)
         if not estimate.success:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "pnp_failed")
+            return self._propagate(
+                state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, "pnp_failed"
+            )
 
         with timer.stage("motion"):
             # Note 5: orthogonalize the camera-frame R first, then invert to world frame.
@@ -219,7 +211,9 @@ class StereoVOPipeline:
             rejection = self.motion_filter.rejection_reason(R_world, t_world)
 
         if rejection is not None:
-            return self._skip(state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, rejection)
+            return self._propagate(
+                state, left_curr_img, right_curr_img, left_feat_curr, right_feat_curr, diag, rejection
+            )
 
         if diag is not None:
             diag["outcome"] = REGISTERED
@@ -231,7 +225,7 @@ class StereoVOPipeline:
             right_image=right_curr_img,
             left_features=left_feat_curr,
             right_features=right_feat_curr,
-            T_prev=T,
+            T_last=T,
             C=C,
         )
 
@@ -256,7 +250,7 @@ class StereoVOPipeline:
             right_image=frame0.right,
             left_features=self.detector.detect(frame0.left),
             right_features=self.detector.detect(frame0.right),
-            T_prev=np.eye(3, 4),
+            T_last=np.eye(3, 4),
             C=np.eye(4),
         )
         # Frame-0 pose = identity, saved first (both variants).

@@ -40,7 +40,7 @@ a separate key.
 | `max_translation` | `motion.max_translation` | Rejects a frame whose relative translation exceeds this value (m). |
 | `max_pitch_deg` | `motion.max_pitch_deg` | **Misnamed (BUG-012):** this setting gates the second Euler component, the rotation about camera *y*. That axis is the vehicle's heading (yaw) axis. It is not pitch. |
 | `orthogonalize_alpha` | `motion.orthogonalize_alpha` | Blend weight toward the planar (yaw-only) rotation |
-| — (behavior differed by script) | `motion.interpolate_on_skip` | `false`: hold the previous pose on a skipped frame (base). `true`: apply the last successful relative motion again (constrained). The name is misleading: this is constant-motion extrapolation, not interpolation. |
+| — (behavior differed by script) | removed (was `motion.interpolate_on_skip`) | Every configuration now assumes constant velocity on a failed registration (§4b, BUG-013). Configs that still set the key are rejected as unknown. |
 
 ## 3. File and output contracts
 
@@ -61,14 +61,24 @@ a separate key.
 | Area | Legacy behavior | Modern behavior |
 |---|---|---|
 | Multiple sequences per run | Crashes on the second sequence after truncating its output file | Each sequence runs independently |
-| No correspondences | `cv2.triangulatePoints` on empty input | Immediate skip with the same pose update as other skips |
+| No correspondences | `cv2.triangulatePoints` on empty input | A failed registration, handled like every other failure (§4b) |
 | Base feature re-detection | Re-detects the previous frame's features every iteration | Carries features forward. The results are numerically identical and detection costs half as much. |
 | Output timing | Appends each pose as it goes, so a crash leaves a partial file | Writes after the sequence completes. Atomic writes and resume are deferred: they do not affect estimates (Phase B scope) |
 | Evaluation script | `create_results.sh`: broken sequence selection; `>` truncates the header | `scripts/evaluate.py` with explicit profiles and an exit status |
 | RPE interval | 100 frames (implicit evo default) | **100 m by default** (`metric_distance`, pairs on the reference path). `legacy_frames` keeps 100 frames, opt-in. |
 
-Pose computation is unchanged. The 11×2 sweep shows byte-identical trajectories
-(§1).
+Before the corrections in §4b, pose computation was unchanged: the 11×2 sweep
+showed byte-identical trajectories (§1).
+
+## 4b. Corrections since the port (Phase B)
+
+Each correction is its own commit with tests. Effects are measured on all 11
+labeled sequences against the package before the correction, with the default
+profiles in SI units.
+
+| ID | Legacy and port behavior | Corrected behavior | Measured effect on KITTI |
+|---|---|---|---|
+| BUG-013 | A failed registration held the pose in base (zero velocity) and repeated the last relative motion in constrained (`interpolate_on_skip`) | Every failed registration (no correspondences, too few points, failed or rejected PnP, implausible motion) propagates the last accepted relative transform: constant velocity, in both configurations. Propagation does not change the transform, and the next registration starts from the current frame | None on the shipped configs: no registration failed on any sequence before this change, so all 22 trajectories are byte-identical |
 
 ## 5. Legacy retirement (plan task B7, executed 2026-10-08)
 
